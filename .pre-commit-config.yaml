@@ -1,0 +1,122 @@
+# =============================================================================
+# Pre-commit Hooks — Quality Gates Before Every Commit
+# =============================================================================
+# Install: pip install pre-commit && pre-commit install
+# Run all: pre-commit run --all-files
+# Update:  pre-commit autoupdate
+# =============================================================================
+
+repos:
+  # ── Formatting & Linting ──────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      # Linter — catches bugs, enforces style, import sorting
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      # Formatter — consistent code style (replaces black)
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # ── Type Checking ─────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.9.0
+          - pydantic-settings>=2.5.0
+          - fastapi>=0.115.0
+          - sqlalchemy>=2.0.35
+          - types-redis
+        args: [--ignore-missing-imports]
+        # Only check centrag/ — not mcp_enterprise_server or tests
+        files: ^centrag/
+
+  # ── General File Hygiene ──────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Prevent accidentally committing large files
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      # Ensure files end with a newline
+      - id: end-of-file-fixer
+      # Remove trailing whitespace
+      - id: trailing-whitespace
+      # Catch merge conflict markers
+      - id: check-merge-conflict
+      # Validate YAML files
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      # Validate TOML files
+      - id: check-toml
+      # Validate JSON files
+      - id: check-json
+        exclude: '\.vscode/'
+      # Detect files that would conflict on case-insensitive filesystems
+      - id: check-case-conflict
+      # Prevent committing to main/master directly
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
+      # Check for broken symlinks
+      - id: check-symlinks
+      # Debug statements (print, pdb) — block from production code
+      - id: debug-statements
+      # Detect private keys
+      - id: detect-private-key
+
+  # ── Security — Secrets Detection ──────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.22.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret scanning)
+
+  # ── Commit Message Convention ─────────────────────────────────────────────
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat      # New feature
+          - fix       # Bug fix
+          - docs      # Documentation
+          - refactor  # Code refactoring
+          - test      # Adding tests
+          - chore     # Maintenance
+          - ci        # CI/CD changes
+          - perf      # Performance
+          - security  # Security patches
+          - infra     # Infrastructure
+
+  # ── SQL Migration Safety ──────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      # Prevent committing .env files (secrets)
+      - id: no-env-files
+        name: block .env files
+        entry: bash -c 'echo "ERROR: .env file detected. Use .env.example instead." && exit 1'
+        language: system
+        files: '^\.env$'
+        types: [file]
+
+      # Ensure alembic migrations are not empty
+      - id: check-migrations
+        name: check alembic migrations not empty
+        entry: python -c "
+import sys, pathlib
+for f in pathlib.Path('alembic/versions').glob('*.py'):
+    content = f.read_text()
+    if 'pass' in content and 'def upgrade' in content:
+        lines = [l.strip() for l in content.split('\n') if l.strip()]
+        up_idx = next((i for i, l in enumerate(lines) if 'def upgrade' in l), -1)
+        if up_idx >= 0 and lines[up_idx+1] == 'pass':
+            print(f'WARNING: Empty migration detected: {f.name}')
+            sys.exit(1)
+"
+        language: system
+        files: '^alembic/versions/.*\.py$'
+        pass_filenames: false

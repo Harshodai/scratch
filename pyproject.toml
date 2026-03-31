@@ -1,0 +1,82 @@
+[project]
+name = "centrag"
+version = "0.1.0"
+description = "CentRAG — Secure, Multi-Tenant RAG-as-a-Service Platform"
+requires-python = ">=3.12"
+authors = [{ name = "CentRAG Team" }]
+
+dependencies = [
+    # --- Web Framework ---
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+
+    # --- Database ---
+    "sqlalchemy[asyncio]>=2.0.35",
+    "asyncpg>=0.30.0",              # Async PostgreSQL driver
+    "alembic>=1.14.0",              # Schema migrations
+    "greenlet>=3.1.0",              # Required by SQLAlchemy async
+
+    # --- Vector DB ---
+    "qdrant-client>=1.12.0",
+
+    # --- Cache ---
+    "redis[hiredis]>=5.2.0",
+
+    # --- AWS ---
+    "boto3>=1.35.0",                # S3, SQS, Bedrock, KMS
+    "aioboto3>=13.0.0",             # Async boto3
+
+    # --- AI / Embeddings ---
+    "cohere>=5.11.0",               # Re-ranking
+    "tiktoken>=0.8.0",              # Token counting
+
+    # --- Document Processing ---
+    "unstructured[all-docs]>=0.16.0",
+
+    # --- Observability ---
+    "langfuse>=2.52.0",
+    "structlog>=24.4.0",
+
+    # --- Security ---
+    "argon2-cffi>=23.1.0",          # API key hashing
+    "cryptography>=43.0.0",
+
+    # --- Utilities ---
+    "httpx>=0.27.0",
+    "tenacity>=9.0.0",              # Retry with backoff
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.0",            # Git hooks framework
+    "locust>=2.32.0",               # Load testing
+    "ragas>=0.2.0",                 # RAG evaluation
+    "deepeval>=1.4.0",              # LLM unit testing
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
