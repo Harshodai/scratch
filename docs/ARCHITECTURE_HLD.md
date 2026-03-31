@@ -62,6 +62,9 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 9 | **Graceful Shutdown** | All services implement tiered shutdown: drain requests → flush analytics → close connections → force-exit with failsafe timeout. Prevents data loss on SIGTERM/SIGINT during rolling deployments. |
 | 10 | **Session Recovery** | Long-running retrieval sessions can be resumed after crash or disconnect. Conversation state is checkpointed to durable storage (PostgreSQL), allowing clients to reconnect without replaying from scratch. |
 | 11 | **Performance Budgets** | Every async operation has a latency budget. Operations exceeding their budget are automatically logged as `slow_operation_detected` warnings with stack traces, enabling zero-effort bottleneck discovery. |
+| 12 | **LLM-Driven Agent Selection** | The LLM itself decides the orchestration strategy at query time. Based on query complexity, it routes to: cache-only (SIMPLE), standard RAG (STANDARD), multi-step retrieval (COMPLEX), or full multi-agent orchestration (RESEARCH). This replaces static routing with dynamic, context-aware selection. See `CROSS_REPO_ANALYSIS.md §3`. |
+| 13 | **Context Engineering** | Aggressive context management: isolated sub-agent contexts, mid-session summarization, memory compression, and progressive skill loading. Inspired by DeerFlow's context summarization and AgentScope's memory compression. See `LEARNING_AND_ROADMAP.md Phase 2`. |
+| 14 | **MCP-First Integration** | All external data source connections (Oracle GOS DB, DynamoDB, Confluence, etc.) are exposed as MCP servers using stdio transport. The retrieval engine acts as an MCP client. This standardizes all integrations via the Model Context Protocol. See `MCP_DEPLOYMENT_GUIDE.md`. |
 
 ---
 

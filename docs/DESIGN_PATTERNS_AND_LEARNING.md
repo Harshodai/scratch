@@ -109,6 +109,23 @@
 | **Orchestration Graphs** | Workflows as traversable DAGs (not linear chains) | LangGraph-style. Our pipeline is linear now; evolve to conditional graph. |
 | **Task Horizon Expansion** | Agents working on tasks spanning hours/days with persistent state | Requires robust memory + checkpointing. Our temporal memory is the foundation. |
 
+### Cross-Repo Pattern Adoptions (DeerFlow / AgentScope / SWE-AF / Claude Code)
+
+> See `docs/CROSS_REPO_ANALYSIS.md` for the full 26-pattern synthesis.
+
+| Pattern | Source Repo | CentRAG Status | Key Design Decision |
+|---------|:-----------:|:--------------:|--------------------|
+| **LLM-Driven Agent Selection** | User Decision | 🔧 P2 | LLM classifies query complexity → selects orchestration strategy (cache-only / standard / multi-agent / full DAG). |
+| **Sub-Agent Spawning** | DeerFlow | ❌ P5 | Lead agent spawns isolated sub-agents with scoped contexts for multi-source retrieval. |
+| **Context Summarization** | DeerFlow | ❌ P2 | Aggressive mid-session summarization of completed retrieval rounds to keep context lean. |
+| **Persistent Memory with Dedup** | DeerFlow | 🔧 P2 | Cross-session memory with fact-level deduplication to prevent bloat. |
+| **Memory Compression** | AgentScope | ❌ P2 | Older conversation turns automatically compressed. Configurable compression window. |
+| **MCP Tool as Function** | AgentScope | ✅ Designed | Each MCP server tool registered as a callable function for the agent toolkit. |
+| **3-Loop Adaptive Control** | SWE-AF | ❌ P3 | Inner (retry) → Middle (advisor) → Outer (replanner). Bounded iterations per loop. |
+| **Hardness-Aware Execution** | SWE-AF | ❌ P3 | Query complexity determines computational budget. Simple queries fast-track. |
+| **Continual Learning** | SWE-AF | ❌ P5 | Failed retrievals logged → patterns analyzed → prompts improved. `enable_learning` flag. |
+| **Multi-Model Role Mapping** | SWE-AF | ❌ P3 | Different models for embed (Titan), generate (Claude), rerank (Cohere), classify (Haiku). |
+
 ### Recommended Reading — Agentic Patterns
 
 | # | Resource | Type | Time | Priority |
@@ -422,7 +439,20 @@ Agentic
 ├── Token Budgeting   → ✅ engine.py (TokenBudgetManager, context compression)
 ├── Adaptive Thinking → ✅ engine.py (<search_strategy> CoT prompt separation)
 ├── Hierarchical Cancel → ✅ engine.py (asyncio.CancelledError propagation)
-└── Planning          → [FUTURE] multi-hop decomposition
+├── Planning          → [FUTURE] multi-hop decomposition
+├── LLM Agent Select  → 🔧 P2 (LLM classifies query → routes orchestration)
+├── Context Summary   → [P2] DeerFlow-inspired mid-session summarization
+├── Memory Compress   → [P2] AgentScope-inspired older turn compression
+├── 3-Loop Control    → [P3] SWE-AF inner/middle/outer adaptive loops
+├── Continual Learn   → [P5] SWE-AF failure pattern → prompt improvement
+└── Sub-Agent Spawn   → [P5] DeerFlow lead agent + scoped sub-agents
+
+MCP Integration
+├── Oracle GOS DB     → 🔧 P2 (SQLcl MCP Server, stdio, read-only)
+├── AWS DynamoDB      → 🔧 P2 (awslabs.dynamodb-mcp-server + aws-api-mcp)
+├── AWS Docs          → 🔧 P2 (awslabs.aws-documentation-mcp-server)
+├── Bedrock KB        → 🔧 P2 (awslabs.bedrock-kb-retrieval-mcp-server)
+└── CentRAG as MCP    → [P6] Expose retrieval as MCP tool for other agents
 
 RAG 2025-2026
 ├── Hybrid Search     → [P1] Qdrant dense + sparse + RRF

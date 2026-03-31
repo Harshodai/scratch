@@ -208,24 +208,28 @@ async def add_memory(self, fact, team_id):
 
 ## 5. Competitor Feature Matrix (Full)
 
-| Feature | CentRAG | Glean | NotebookLM | Onyx (Danswer) | Vectara | Mem0 |
-|---------|:-------:|:-----:|:----------:|:--------------:|:-------:|:----:|
-| Multi-tenant namespace isolation | ✅ ✅ | ✅ (single-tenant) | ❌ (personal) | ⚠️ | ✅ | ❌ |
-| Hybrid retrieval (dense+sparse) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Re-ranking | ✅ Cohere | ✅ Proprietary | ✅ BGE | ✅ | ✅ Built-in | ❌ |
-| Knowledge Graph | ✅ Neptune | ✅ Enterprise Graph | ❌ | ❌ | ❌ | ⚠️ |
-| Memory layer | ✅ 4-tier | ❌ | ❌ | ❌ | ❌ | ✅ ✅ |
-| Temporal memory | ❌ → **🔧 Planned** | ❌ | ❌ | ❌ | ❌ | ⚠️ |
-| Semantic cache | ✅ 4-tier | Unknown | ❌ | ❌ | ❌ | ❌ |
-| Source citations | ✅ | ✅ | ✅ ✅ (inline) | ✅ | ✅ | ❌ |
-| MCP connectors | ✅ 3 built | ✅ 100+ | ❌ | ✅ 30+ | ❌ | ❌ |
-| Self-hosted | ✅ CDK | ✅ (Enterprise) | ❌ | ✅ Docker | ✅ (Enterprise, Helm/TF) | ✅ |
-| BYOK encryption | ✅ (disk-level) | Unknown | ❌ | ❌ | ❌ | ❌ |
-| PII redaction | ✅ Auto | Unknown | ❌ | ❌ | ❌ | ❌ |
-| AI observability | ✅ Langfuse | Unknown | ❌ | ❌ | ❌ | ❌ |
-| Log-to-RAG pipeline | ✅ 4-stage | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Multimodal | ❌ | ✅ | ✅ ✅ | ⚠️ | ✅ | ❌ |
-| Permission syncing from sources | ❌ → **Phase 4** | ✅ ✅ | ❌ | ✅ | ❌ | ❌ |
+| Feature | CentRAG | Glean | NotebookLM | Mem0 | DeerFlow | AgentScope | SWE-AF |
+|---------|:-------:|:-----:|:----------:|:----:|:--------:|:----------:|:------:|
+| Multi-tenant namespace isolation | ✅ ✅ | ✅ (single-tenant) | ❌ (personal) | ❌ | ❌ | ❌ | ❌ |
+| Hybrid retrieval (dense+sparse) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Re-ranking | ✅ Cohere | ✅ Proprietary | ✅ BGE | ❌ | ❌ | ❌ | ❌ |
+| Knowledge Graph | ✅ Neptune | ✅ Enterprise Graph | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| Memory layer | ✅ 4-tier | ❌ | ❌ | ✅ ✅ | ✅ Persistent | ✅ Compressed | ❌ |
+| Temporal memory | ❌ → **🔧 Planned** | ❌ | ❌ | ⚠️ | ✅ Dedup | ⚠️ | ❌ |
+| Semantic cache | ✅ 4-tier | Unknown | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Source citations | ✅ | ✅ | ✅ ✅ (inline) | ❌ | ❌ | ❌ | ❌ |
+| MCP connectors | ✅ 3 built | ✅ 100+ | ❌ | ❌ | ❌ | ✅ MCP+A2A | ❌ |
+| Self-hosted | ✅ CDK | ✅ (Enterprise) | ❌ | ✅ | ✅ Docker | ✅ pip | ✅ pip |
+| PII redaction | ✅ Auto | Unknown | ❌ | ❌ | ❌ | ❌ | ❌ |
+| AI observability | ✅ Langfuse | Unknown | ❌ | ❌ | ✅ LangGraph | ✅ Built-in | ✅ Logs |
+| **Sub-agent spawning** | ❌ → **P5** | ❌ | ❌ | ❌ | ✅ ✅ | ✅ MsgHub | ✅ DAG |
+| **Adaptive control loops** | ✅ CRAG | ❌ | ❌ | ❌ | ⚠️ | ✅ ReAct | ✅ ✅ 3-Loop |
+| **LLM-driven routing** | ❌ → **🔧 P2** | ⚠️ | ❌ | ❌ | ✅ | ✅ | ✅ Hardness |
+| **Continual learning** | ❌ → **P5** | Unknown | ❌ | ❌ | ❌ | ⚠️ RL | ✅ ✅ |
+| **Context summarization** | ❌ → **P2** | ❌ | ✅ | ❌ | ✅ ✅ | ✅ | ❌ |
+| **Session checkpointing** | 🔧 → **P4** | Unknown | ❌ | ❌ | ✅ | ⚠️ | ✅ ✅ |
+| **A2A protocol** | ❌ → **P6** | ❌ | ❌ | ❌ | ❌ | ✅ ✅ | ❌ |
+| Permission syncing from sources | ❌ → **Phase 4** | ✅ ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
