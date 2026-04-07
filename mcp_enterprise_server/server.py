@@ -34,6 +34,7 @@ from mcp_enterprise_server.config import MCPServerConfig
 from mcp_enterprise_server.gosdb_mcp import GOSDBPool, GOSDBAppContext, register_gosdb_tools
 from mcp_enterprise_server.dynamodb_mcp import register_dynamodb_tools
 from mcp_enterprise_server.athena_mcp import register_athena_tools
+from mcp_enterprise_server.s3_mcp import register_s3_tools
 from mcp_enterprise_server.guardrails import init_guardrails
 
 # ---------------------------------------------------------------------------
@@ -119,6 +120,7 @@ def create_server() -> FastMCP:
     register_gosdb_tools(mcp, config.gosdb)
     register_dynamodb_tools(mcp, config.dynamodb)
     register_athena_tools(mcp, config.athena)
+    register_s3_tools(mcp, config.s3)
 
     # Add a health-check / info resource
     @mcp.resource("server://info")
@@ -137,6 +139,11 @@ def create_server() -> FastMCP:
                     "region": config.dynamodb.region.value,
                     "tables": config.dynamodb.allowed_tables or ["*"],
                     "permission": config.dynamodb.permission_level.value,
+                },
+                "s3": {
+                    "region": config.s3.region.value,
+                    "buckets": config.s3.allowed_buckets or ["*"],
+                    "permission": config.s3.permission_level.value,
                 },
                 "athena": {
                     "region": config.athena.region.value,

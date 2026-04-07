@@ -165,6 +165,58 @@ MCP_SERVER_TRUST_POLICY = {
 
 
 # ---------------------------------------------------------------------------
+# S3 — Read-Only Policy
+# ---------------------------------------------------------------------------
+S3_READ_ONLY_POLICY = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "MCPS3ReadOnly",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion",
+                "s3:HeadObject",
+                "s3:ListBucket",
+                "s3:ListBucketVersions",
+                "s3:GetBucketLocation",
+            ],
+            "Resource": [
+                "arn:aws:s3:::ALLOWED_BUCKET_1",
+                "arn:aws:s3:::ALLOWED_BUCKET_1/*",
+                "arn:aws:s3:::ALLOWED_BUCKET_2",
+                "arn:aws:s3:::ALLOWED_BUCKET_2/*",
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": ["us-east-1", "us-west-2"]
+                }
+            }
+        },
+        {
+            "Sid": "MCPS3ListAllBuckets",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListAllMyBuckets",
+            ],
+            "Resource": "*",
+        },
+        {
+            "Sid": "DenyS3Write",
+            "Effect": "Deny",
+            "Action": [
+                "s3:PutObject",
+                "s3:DeleteObject",
+                "s3:DeleteBucket",
+                "s3:PutBucketPolicy",
+            ],
+            "Resource": "*",
+        },
+    ]
+}
+
+
+# ---------------------------------------------------------------------------
 # Helper: Export policies as JSON files
 # ---------------------------------------------------------------------------
 def export_policies(output_dir: str = ".") -> None:
@@ -176,6 +228,7 @@ def export_policies(output_dir: str = ".") -> None:
         "dynamodb_read_only_policy.json": DYNAMODB_READ_ONLY_POLICY,
         "dynamodb_read_write_policy.json": DYNAMODB_READ_WRITE_POLICY,
         "athena_read_only_policy.json": ATHENA_READ_ONLY_POLICY,
+        "s3_read_only_policy.json": S3_READ_ONLY_POLICY,
         "mcp_server_trust_policy.json": MCP_SERVER_TRUST_POLICY,
     }
 

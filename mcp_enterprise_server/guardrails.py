@@ -198,30 +198,11 @@ def check_rate_limit(caller_id: str, tool_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. PII Redaction
+# 3. PII Redaction — SINGLE SOURCE from centrag.guardrails.pii
 # ---------------------------------------------------------------------------
-_PII_PATTERNS: dict[str, re.Pattern] = {
-    "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
-    "credit_card": re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
-    "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-    "phone_us": re.compile(r"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
-}
-
-
-def redact_pii(text: str, enable: bool = True) -> str:
-    """
-    Redact common PII patterns from text.
-    Returns the redacted text.
-
-    In enterprise settings, consider using a dedicated PII detection
-    service (e.g., AWS Comprehend, Presidio) for higher accuracy.
-    """
-    if not enable:
-        return text
-
-    for pii_type, pattern in _PII_PATTERNS.items():
-        text = pattern.sub(f"[REDACTED_{pii_type.upper()}]", text)
-    return text
+# Previously duplicated here. Now imports from shared source to prevent drift.
+from centrag.guardrails.pii import PII_PATTERNS as _PII_PATTERNS  # noqa: E402
+from centrag.guardrails.pii import redact_pii  # noqa: E402, F811
 
 
 # ---------------------------------------------------------------------------

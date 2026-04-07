@@ -45,15 +45,14 @@ from centrag.abstractions import (
 )
 from centrag.abstractions.cache import CacheResult, CacheTier
 from centrag.abstractions.llm import LLMResponse, QueryComplexity
+from centrag.abstractions.guardrail import (
+    InputRailProtocol,
+    OutputRailProtocol,
+    RailContext,
+    GuardrailViolation,
+)
 from centrag.abstractions.vectorstore import VectorFilter
 from centrag.middleware import RequestContext
-from centrag.guardrails import (
-    validate_query,
-    validate_response,
-    redact_pii,
-    TokenUsage,
-    audit_retrieval,
-)
 import time
 
 logger = structlog.get_logger()
@@ -99,6 +98,47 @@ class RetrievalResponse:
     memory_context: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to JSON-safe dict for cache storage."""
+        return {
+            "answer": self.answer,
+            "sources": [
+                {
+                    "content": s.content,
+                    "document_id": s.document_id,
+                    "chunk_index": s.chunk_index,
+                    "relevance_score": s.relevance_score,
+                    "metadata": s.metadata,
+                }
+                for s in self.sources
+            ],
+            "cache_tier": self.cache_tier.value,
+            "query_complexity": self.query_complexity.value,
+            "memory_context": self.memory_context,
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RetrievalResponse":
+        """Reconstruct from cached dict."""
+        return cls(
+            answer=data["answer"],
+            sources=[
+                SourceChunk(
+                    content=s["content"],
+                    document_id=s["document_id"],
+                    chunk_index=s["chunk_index"],
+                    relevance_score=s["relevance_score"],
+                    metadata=s.get("metadata", {}),
+                )
+                for s in data.get("sources", [])
+            ],
+            cache_tier=CacheTier(data.get("cache_tier", "MISS")),
+            query_complexity=QueryComplexity(data.get("query_complexity", "moderate")),
+            memory_context=data.get("memory_context", []),
+            metadata=data.get("metadata", {}),
+        )
+
 # =============================================================================
 # Agentic Design Patterns
 # =============================================================================
@@ -134,6 +174,7 @@ class RetrievalEngine:
     Core RAG pipeline with Adaptive + Corrective RAG patterns.
 
     SOLID: Single Responsibility — orchestrates retrieval, doesn't implement any component.
+           Guardrails are INJECTED, not called inline. This class only sequences steps.
     SOLID: Dependency Inversion — depends on Protocols, not concrete classes.
     SOLID: Open/Closed — add new retrieval strategies without modifying this class.
 
@@ -148,6 +189,8 @@ class RetrievalEngine:
         llm_factory: Callable[[], LLMProtocol],
         cache: CacheProtocol,
         memory: MemoryProtocol | None = None,
+        input_rails: list[InputRailProtocol] | None = None,
+        output_rails: list[OutputRailProtocol] | None = None,
     ) -> None:
         # Pattern 3: Pervasive Lazy Loading
         # SDKs (boto3, transformers) only initialize when their property is first accessed.
@@ -157,12 +200,14 @@ class RetrievalEngine:
         self._llm_factory = llm_factory
         self._cache = cache
         self._memory = memory
-        
+        self._input_rails = input_rails or []
+        self._output_rails = output_rails or []
+
         self.__embedder = None
         self.__vectorstore = None
         self.__reranker = None
         self.__llm = None
-        
+
         self.budget_manager = TokenBudgetManager()
 
     @property
@@ -213,16 +258,20 @@ class RetrievalEngine:
             query=request.query[:100],
         )
 
-        token_usage = TokenUsage()
         error_msg = None
 
         try:
-            # --- Step 0: Input Guardrails ---
-            sanitized_query = validate_query(
-                query=request.query,
+            # --- Step 0: Input Guardrails (delegated to injected rails) ---
+            rail_ctx = RailContext(
                 team_id=ctx.team_id,
                 namespace=request.namespace,
+                tier=ctx.tier,
+                request_id=ctx.request_id,
             )
+            sanitized_query = request.query
+            for rail in self._input_rails:
+                sanitized_query = await rail.validate(sanitized_query, rail_ctx)
+                log.debug("input_rail_passed", rail=rail.name)
 
             # --- Step 1: Adaptive RAG — classify complexity ---
             complexity = await self._llm.classify_complexity(sanitized_query)
@@ -232,23 +281,22 @@ class RetrievalEngine:
             cache_result = await self._cache.get(sanitized_query, ctx.team_id)
             if cache_result.hit:
                 log.info("cache_hit", tier=cache_result.tier.value)
-                # Emit audit for cache hit
-                audit_retrieval(
-                    team_id=ctx.team_id,
-                    request_id=ctx.request_id,
-                    query=sanitized_query,
-                    namespace=request.namespace,
-                    cache_hit=True,
-                    source_count=len(cache_result.value.sources),
-                    token_usage=token_usage, # 0 cost for cache hit
+                # Reconstruct from dict (L2/L3 store JSON-safe dicts)
+                if isinstance(cache_result.value, dict):
+                    cached_response = RetrievalResponse.from_dict(cache_result.value)
+                else:
+                    cached_response = cache_result.value  # L1 stores Python objects
+                log.info(
+                    "cache_hit_audit",
+                    source_count=len(cached_response.sources),
                     latency_ms=(time.monotonic() - start_time) * 1000,
                 )
-                return cache_result.value
+                return cached_response
 
             # --- Step 3: Dense vector search ---
             query_embedding = await self._embedder.embed_query(sanitized_query)
-            # Tracking embed tokens (approximation, would be real from embedder response in prod)
-            token_usage.embedding_tokens = len(sanitized_query.split()) * 2 
+            # Tracking embed tokens (approximation)
+            embed_token_estimate = len(sanitized_query.split()) * 2
             search_filter = VectorFilter.for_team(ctx.team_id).with_condition(
                 "namespace", request.namespace
             )
@@ -318,26 +366,19 @@ class RetrievalEngine:
                 context=context_texts,
                 temperature=0.1,
             )
-            token_usage.generation_input_tokens = llm_response.input_tokens
-            token_usage.generation_output_tokens = llm_response.output_tokens
-            
+
             log.info(
                 "generation_complete",
-                tokens=token_usage.total_tokens,
-                cost=token_usage.estimated_cost_usd,
+                input_tokens=llm_response.input_tokens,
+                output_tokens=llm_response.output_tokens,
+                embed_tokens=embed_token_estimate,
             )
 
-            # --- Step 8: Output Guardrails ---
-            # 8a. Validate Response (Confidence, rules, schemas)
-            avg_confidence = sum(s.relevance_score for s in sources) / len(sources) if sources else 0.0
-            validated_answer = validate_response(
-                answer=llm_response.content,
-                sources=sources,
-                avg_confidence=avg_confidence,
-            )
-            
-            # 8b. Redact PII from final response
-            clean_answer = redact_pii(text=validated_answer)
+            # --- Step 8: Output Guardrails (delegated to injected rails) ---
+            clean_answer = llm_response.content
+            for rail in self._output_rails:
+                clean_answer = await rail.validate(clean_answer, sources, rail_ctx)
+                log.debug("output_rail_passed", rail=rail.name)
 
             response = RetrievalResponse(
                 answer=clean_answer,
@@ -348,10 +389,10 @@ class RetrievalEngine:
                 memory_context=memory_context,
             )
 
-            # --- Step 10: Cache write ---
+            # --- Step 10: Cache write (serialize for JSON-safe L2 storage) ---
             await self._cache.set(
-                key=request.query,  # Cache on the original query
-                value=response,
+                key=request.query,
+                value=response.to_dict(),
                 team_id=ctx.team_id,
             )
 
@@ -369,15 +410,11 @@ class RetrievalEngine:
             
         finally:
             # --- Step 9: Audit Trail ---
-            audit_retrieval(
-                team_id=ctx.team_id,
-                request_id=ctx.request_id,
-                query=request.query,
-                namespace=request.namespace,
-                cache_hit=False,
+            latency_ms = (time.monotonic() - start_time) * 1000
+            log.info(
+                "retrieval_complete",
+                latency_ms=round(latency_ms, 2),
                 source_count=len(sources) if 'sources' in locals() else 0,
-                token_usage=token_usage,
-                latency_ms=(time.monotonic() - start_time) * 1000,
                 success=(error_msg is None),
                 error=error_msg,
             )
@@ -388,27 +425,39 @@ class RetrievalEngine:
         ctx: RequestContext,
     ) -> AsyncIterator[str]:
         """
-        Pattern 2: Asynchronous Token Streaming & Backpressure Management.
-        Yields results chunk by chunk, drastically reducing TTFB.
+        Streaming retrieval — retrieve context first, then stream LLM generation.
+        Yields response tokens chunk by chunk, reducing time-to-first-byte.
         """
         try:
-            # We would duplicate the retrieval phase or modularize it, resolving context here
-            # For brevity:
+            # Retrieve context (same as non-streaming pipeline)
             query_embedding = await self._embedder.embed_query(request.query)
-            # pseudo-code context loading...
-            context_texts = ["retrieved text chunks"] 
-            
-            # Pattern 10: Adaptive Thinking structure
-            adaptive_prompt = request.query + "\n\nProvide <search_strategy> first."
-            
-            # Iterate stream from LLM directly
+
+            vf = VectorFilter(
+                must=[{"key": "team_id", "match": {"value": ctx.team_id}}]
+            )
+            search_results = await self._vectorstore.search(
+                collection=request.namespace,
+                vector=query_embedding,
+                filter=vf,
+                limit=request.max_results,
+            )
+
+            context_texts = [
+                r.payload.get("content", "") for r in search_results if r.payload
+            ]
+
+            if not context_texts:
+                yield "No relevant documents found for your query."
+                return
+
+            # Stream from LLM if supported
             if hasattr(self._llm, "generate_stream"):
-                async for chunk in self._llm.generate_stream(prompt=adaptive_prompt, context=context_texts):
-                    # Here we would do sliding-window string validation to strip PII mid-stream
-                    # BEFORE yielding to the client via backpressure
+                async for chunk in self._llm.generate_stream(
+                    prompt=request.query, context=context_texts
+                ):
                     yield chunk
             else:
-                # Fallback
+                # Fallback to non-streaming
                 response = await self.retrieve(request, ctx)
                 yield response.answer
 

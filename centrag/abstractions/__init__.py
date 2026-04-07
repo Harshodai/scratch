@@ -26,6 +26,9 @@ from centrag.abstractions.llm import LLMProtocol
 from centrag.abstractions.cache import CacheProtocol
 from centrag.abstractions.reranker import RerankerProtocol
 from centrag.abstractions.memory import MemoryProtocol
+from centrag.abstractions.extractor import ExtractorProtocol
+from centrag.abstractions.chunker import ChunkerProtocol
+from centrag.abstractions.guardrail import InputRailProtocol, OutputRailProtocol
 
 __all__ = [
     "EmbedderProtocol",
@@ -34,4 +37,8 @@ __all__ = [
     "CacheProtocol",
     "RerankerProtocol",
     "MemoryProtocol",
+    "ExtractorProtocol",
+    "ChunkerProtocol",
+    "InputRailProtocol",
+    "OutputRailProtocol",
 ]

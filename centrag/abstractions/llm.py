@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
 
 class QueryComplexity(str, Enum):
@@ -68,3 +68,21 @@ class LLMProtocol(Protocol):
         Complex → multi-hop retrieval + frontier model
         """
         ...
+
+    def generate_stream(
+        self,
+        prompt: str,
+        context: list[str],
+        system_prompt: str | None = None,
+        temperature: float = 0.1,
+        max_tokens: int = 2048,
+    ) -> AsyncIterator[str]:
+        """
+        Stream response tokens for reduced time-to-first-byte.
+
+        Yields chunks of text as they're generated.
+        The engine checks hasattr(llm, 'generate_stream') before calling,
+        so implementations may omit this for batch-only providers.
+        """
+        ...
+

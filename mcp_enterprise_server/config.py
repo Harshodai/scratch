@@ -138,6 +138,39 @@ class AthenaConfig(BaseSettings):
 
 
 # ---------------------------------------------------------------------------
+# AWS S3 Configuration
+# ---------------------------------------------------------------------------
+class S3Config(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="S3_")
+
+    region: AWSRegion = Field(default=AWSRegion.US_EAST_1)
+    role_arn: Optional[str] = Field(default=None, description="IAM Role ARN to assume")
+    session_duration_seconds: int = Field(default=3600)
+    permission_level: PermissionLevel = Field(default=PermissionLevel.READ_ONLY)
+    # Guardrails
+    allowed_buckets: list[str] = Field(
+        default=[],
+        description="Whitelisted S3 bucket names. Empty = all buckets the role can access."
+    )
+    allowed_prefixes: list[str] = Field(
+        default=[],
+        description="Whitelisted key prefixes. Empty = all prefixes allowed."
+    )
+    max_object_size_bytes: int = Field(
+        default=50 * 1024 * 1024,  # 50 MB
+        description="Max object size to retrieve (prevents downloading huge files)"
+    )
+    max_list_results: int = Field(
+        default=1000,
+        description="Max objects returned in list operations"
+    )
+    blocked_extensions: list[str] = Field(
+        default=[".exe", ".dll", ".so", ".bin", ".zip", ".tar.gz"],
+        description="File extensions blocked from download"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Rate Limiting & Observability Configuration
 # ---------------------------------------------------------------------------
 class GuardrailsConfig(BaseSettings):
@@ -186,4 +219,5 @@ class MCPServerConfig(BaseSettings):
     gosdb: GOSDBConfig = Field(default_factory=GOSDBConfig)
     dynamodb: DynamoDBConfig = Field(default_factory=DynamoDBConfig)
     athena: AthenaConfig = Field(default_factory=AthenaConfig)
+    s3: S3Config = Field(default_factory=S3Config)
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig)
