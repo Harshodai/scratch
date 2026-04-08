@@ -1,0 +1,613 @@
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --acc-teal:#0F6E56;--acc-teal-light:#E1F5EE;--acc-teal-border:#9FE1CB;
+  --acc-blue:#185FA5;--acc-blue-light:#E6F1FB;--acc-blue-border:#B5D4F4;
+  --acc-purple:#534AB7;--acc-purple-light:#EEEDFE;--acc-purple-border:#CECBF6;
+  --acc-amber:#BA7517;--acc-amber-light:#FAEEDA;--acc-amber-border:#FAC775;
+  --acc-red:#A32D2D;--acc-red-light:#FCEBEB;--acc-red-border:#F7C1C1;
+}
+.cg-wrap{max-width:780px;margin:0 auto;padding:.5rem .5rem 3rem;font-family:var(--font-sans)}
+.cg-hero{padding:1.5rem 0 1.25rem;border-bottom:.5px solid var(--color-border-tertiary);margin-bottom:0}
+.cg-eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-secondary);margin-bottom:.4rem}
+.cg-title{font-size:26px;font-weight:500;color:var(--color-text-primary);line-height:1.2;margin-bottom:.4rem}
+.cg-sub{font-size:13px;color:var(--color-text-secondary);line-height:1.6;max-width:540px;margin-bottom:1rem}
+.pill-row{display:flex;flex-wrap:wrap;gap:6px}
+.pill{font-size:10px;padding:3px 8px;border-radius:20px;font-weight:500;border:.5px solid;line-height:1.4}
+.p-teal{background:var(--acc-teal-light);color:#085041;border-color:var(--acc-teal-border)}
+.p-blue{background:var(--acc-blue-light);color:#0C447C;border-color:var(--acc-blue-border)}
+.p-purple{background:var(--acc-purple-light);color:#3C3489;border-color:var(--acc-purple-border)}
+.p-amber{background:var(--acc-amber-light);color:#633806;border-color:var(--acc-amber-border)}
+.p-red{background:var(--acc-red-light);color:#791F1F;border-color:var(--acc-red-border)}
+
+.tabs{display:flex;border-bottom:.5px solid var(--color-border-tertiary);margin-bottom:1.5rem;overflow-x:auto;gap:0;padding-top:1rem}
+.tab-btn{padding:.55rem 1rem;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--color-text-secondary);border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;font-family:var(--font-sans)}
+.tab-btn:hover{color:var(--color-text-primary)}
+.tab-btn.on{color:var(--acc-blue);border-bottom-color:var(--acc-blue)}
+.sec{display:none}.sec.on{display:block}
+
+.faq-cat{margin-bottom:1.75rem}
+.faq-cat-title{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--color-text-secondary);margin-bottom:.65rem;padding-bottom:.35rem;border-bottom:.5px solid var(--color-border-tertiary)}
+.faq-item{border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:.4rem;overflow:hidden;background:var(--color-background-primary)}
+.faq-q{width:100%;text-align:left;background:none;border:none;padding:.8rem 1rem;font-size:13px;font-weight:500;color:var(--color-text-primary);cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;line-height:1.5;font-family:var(--font-sans)}
+.faq-q:hover{background:var(--color-background-secondary)}
+.faq-icon{font-size:15px;flex-shrink:0;color:var(--color-text-secondary);transition:transform .2s;margin-top:1px;font-style:normal}
+.faq-a{display:none;padding:.25rem 1rem 1rem;font-size:13px;color:var(--color-text-secondary);line-height:1.75}
+.faq-a.open{display:block}
+.faq-a p{margin-bottom:.55rem}
+.faq-a p:last-child{margin-bottom:0}
+.faq-a ul{padding-left:1.1rem;margin:.35rem 0}
+.faq-a li{margin-bottom:.3rem}
+.faq-a code{font-size:11.5px;background:var(--color-background-secondary);padding:1px 4px;border-radius:4px;color:var(--color-text-primary);font-family:var(--font-mono)}
+.hard-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:var(--acc-red-light);color:var(--acc-red);border:.5px solid var(--acc-red-border);font-weight:500;margin-left:5px;vertical-align:middle;line-height:1.5}
+.tip-box{background:var(--acc-teal-light);border:.5px solid var(--acc-teal-border);border-radius:8px;padding:.6rem .85rem;font-size:12px;color:#085041;margin-top:.55rem;line-height:1.6}
+.warn-box{background:var(--acc-amber-light);border:.5px solid var(--acc-amber-border);border-radius:8px;padding:.6rem .85rem;font-size:12px;color:#633806;margin-top:.55rem;line-height:1.6}
+.info-box{background:var(--acc-blue-light);border:.5px solid var(--acc-blue-border);border-radius:8px;padding:.6rem .85rem;font-size:12px;color:#0C447C;margin-top:.55rem;line-height:1.6}
+
+.phase-card{background:var(--color-background-primary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1.2rem;margin-bottom:.85rem}
+.phase-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:.8rem}
+.phase-badge{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0;font-family:var(--font-mono)}
+.pb-1{background:var(--acc-teal-light);color:#085041}
+.pb-2{background:var(--acc-blue-light);color:#0C447C}
+.pb-3{background:var(--acc-purple-light);color:#3C3489}
+.pb-4{background:var(--acc-amber-light);color:#633806}
+.phase-meta{flex:1}
+.phase-title{font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.phase-timeline{font-size:12px;color:var(--color-text-secondary)}
+.phase-obj{font-size:12.5px;color:var(--color-text-secondary);line-height:1.65;margin-bottom:.75rem;padding-left:46px}
+.phase-tasks{padding-left:46px;margin-bottom:.75rem}
+.task-row{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;margin-bottom:.35rem;color:var(--color-text-primary);line-height:1.55}
+.task-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.td-1{background:#0F6E56}.td-2{background:#185FA5}.td-3{background:#534AB7}.td-4{background:#BA7517}
+.deliverable-box{padding:.6rem .85rem;background:var(--color-background-secondary);border-radius:8px;font-size:12px;margin-left:46px}
+.del-label{color:var(--color-text-secondary);margin-right:4px}
+.del-items{color:var(--color-text-primary)}
+.phase-connector{text-align:center;color:var(--color-text-secondary);font-size:16px;margin:.2rem 0;padding-left:17px}
+
+.lr-tier-label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:500;padding:.3rem .7rem;border-radius:6px;display:inline-block;margin-bottom:.85rem;line-height:1.5}
+.lt-1{background:var(--acc-teal-light);color:#085041}
+.lt-2{background:var(--acc-blue-light);color:#0C447C}
+.lt-3{background:var(--acc-purple-light);color:#3C3489}
+.lt-4{background:var(--acc-amber-light);color:#633806}
+.lr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:.5rem;margin-bottom:1.4rem}
+.lr-card{background:var(--color-background-primary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.7rem .85rem}
+.lc-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:.25rem}
+.lc-body{font-size:12px;color:var(--color-text-secondary);line-height:1.55}
+.res-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:8px;background:var(--acc-blue-light);color:#0C447C;margin-top:.35rem;border:.5px solid var(--acc-blue-border)}
+.lr-divider{height:.5px;background:var(--color-border-tertiary);margin:0 0 1.1rem}
+
+.sec-heading{font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem}
+
+@media(max-width:500px){.cg-title{font-size:21px}.lr-cards{grid-template-columns:1fr}}
+</style>
+
+<div class="cg-wrap">
+  <div class="cg-hero">
+    <div class="cg-eyebrow">CentRAG — Complete Field Guide</div>
+    <div class="cg-title">FAQs · Phase Plan · Learning Roadmap</div>
+    <div class="cg-sub">Everything you need before, during, and after building CentRAG — from first principles through production. Covers CRAG, Agentic RAG, Graph RAG, Semantic Caching, MCP, and the full learning arc.</div>
+    <div class="pill-row">
+      <span class="pill p-teal">Corrective RAG</span>
+      <span class="pill p-blue">Agentic RAG</span>
+      <span class="pill p-purple">Graph RAG</span>
+      <span class="pill p-amber">Semantic Caching</span>
+      <span class="pill p-teal">MCP</span>
+      <span class="pill p-blue">LangGraph</span>
+      <span class="pill p-purple">Qdrant</span>
+      <span class="pill p-amber">HydraDB / Mem0</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn on" onclick="sw('faq',this)">FAQs</button>
+    <button class="tab-btn" onclick="sw('phases',this)">Phase Plan</button>
+    <button class="tab-btn" onclick="sw('learn',this)">Learning Roadmap</button>
+  </div>
+
+  <!-- ===== FAQ ===== -->
+  <div class="sec on" id="faq">
+
+    <div class="faq-cat">
+      <div class="faq-cat-title">Foundations</div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What exactly is CentRAG and why does it exist?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>CentRAG (Centralized RAG) is an enterprise-grade retrieval-augmented generation platform designed to serve multiple teams from a single, multi-tenant, pluggable architecture. It exists because most orgs end up with many ad-hoc LLM integrations — each team rolling their own embedding pipeline, prompt layer, and connectors. CentRAG replaces that chaos with one governed platform: consistent quality, shared cost, unified observability.</p>
+          <p>The core innovation is treating retrieval as a <em>routed, agentic decision</em> rather than a static "always embed and search" pipeline. Different query types get different retrieval strategies — SQL for structured data, graph traversal for entity-rich domains, BM25/structural for documents — all driven by a LangGraph-based orchestrator with CRAG quality control layered on top.</p>
+          <div class="info-box">The goal is "vectors as a last resort, not the default" — most queries (structured DB, logs, graph) run vectorless; the vector store is the safety net when other retrievers return poor context.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What is the difference between CRAG, Agentic RAG, and Graph RAG?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p><strong>Corrective RAG (CRAG)</strong> adds a retrieval evaluator that grades context quality after any retrieval step. If the result is "Incorrect" or "Ambiguous," it triggers a correction — web search, broader window, or a disambiguation question. It is a quality guardrail that wraps any retrieval backend, not a retrieval method itself.</p>
+          <p><strong>Agentic RAG</strong> wraps retrieval in an agent that plans and routes. Instead of always hitting the vector store, the agent decides <em>which tools to call</em> — SQL via MCP, log filters, graph queries, vector search — based on query type. CentRAG's SIMPLE / STANDARD / COMPLEX / RESEARCH routing tiers are an Agentic RAG pattern.</p>
+          <p><strong>Graph RAG</strong> builds and queries a knowledge graph (Neptune / Neo4j) to handle multi-hop reasoning — "who owns service X and what incidents affected its dependencies?" It is a retrieval backend, not an orchestration layer.</p>
+          <div class="tip-box">These three are <em>orthogonal and complementary</em>. CRAG wraps any retrieval. Agentic RAG routes between retrievers. GraphRAG is one retriever among many. CentRAG uses all three simultaneously — and per 2026 benchmarks, combining all three outperforms any single approach by a significant margin.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What is MCP and why is CentRAG adopting it?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Model Context Protocol (MCP) is an open standard by Anthropic that exposes external systems (databases, logs, ticketing tools, memory backends) as uniform JSON-RPC tool endpoints that any MCP-aware agent framework can call.</p>
+          <p>CentRAG adopts MCP because it eliminates bespoke per-system integrations. Instead of writing a custom GOS DB connector, a custom Jira connector, etc., you write one MCP server per system and any agent — including future ones — can use it. Governance becomes: "enable/disable an MCP server for a team namespace."</p>
+          <p>Think of RAG as the <em>knowledge engine</em> and MCP as the <em>connector fabric</em> underneath it. MCP also lets CentRAG evolve toward general agentic workloads (code-assist, workflow automation) without rewriting integrations.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What is semantic caching and why does CentRAG need it?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Semantic caching (L3 in CentRAG) stores the <em>meaning</em> of queries and their responses. When a new query is semantically similar to a cached one — even if the wording differs — it returns the cached answer instead of re-running the full retrieval + generation pipeline.</p>
+          <p>CentRAG's cache hierarchy: <code>L1</code> (exact hash match) → <code>L2</code> (template / near-exact) → <code>L3</code> (semantic, Qdrant-backed embedding similarity). For enterprise multi-tenant use, L3 hits can reduce LLM spend by 40–60% on repeated knowledge queries.</p>
+          <p>The key design choice: make L3 namespace-aware so Team A's cached answers don't bleed into Team B's context. The cache key must always include the namespace. Tools: Redis LangCache, GPTCache, or a Qdrant-backed semantic cache all work here.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-cat">
+      <div class="faq-cat-title">Architecture Decisions</div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">Can I build CentRAG without a vector database?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Partially yes, mostly no — and the answer depends on query type:</p>
+          <ul>
+            <li><strong>Structured data (GOS DB, Athena, DynamoDB):</strong> 100% vectorless. Agent generates SQL/filters via MCP, no embeddings needed.</li>
+            <li><strong>Logs:</strong> Mostly vectorless via time-bounded filters, aggregation, structured fields. Embeddings only for free-text semantic log search (rare edge case).</li>
+            <li><strong>Documents (PDFs, Confluence, Jira):</strong> Vectorless is viable for <em>small corpora</em> using PageIndex (tree-structured, LLM-navigated index) or BM25 + long-context. But for large multi-tenant knowledge bases, BM25 degrades on semantic paraphrases. Fully vectorless here means a measurable quality drop.</li>
+          </ul>
+          <div class="tip-box">Recommended design: "vectors as a last resort." Agentic router tries vectorless modes first; CRAG evaluator promotes to vector search only when it grades context as weak. This gets you 70–80% of queries running without embedding pipeline costs.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What is PageIndex and how does it replace chunking?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>PageIndex is a vectorless, reasoning-based retrieval system. Instead of breaking documents into fixed-size chunks and embedding them, it builds a hierarchical tree of pages and sections using structural cues (headings, TOC, anchors).</p>
+          <p>Retrieval becomes agentic navigation: the LLM reads the top-level structure and decides which sub-sections to open next, recursing until it has enough context. No vector DB, no embedding pipeline, no chunk-size tuning required.</p>
+          <p>Trade-off: it uses more LLM calls per query (navigation cost), and is more brittle on poorly structured documents (flat PDFs with no headings). Best suited for well-structured technical docs, runbooks, and architecture documents — exactly what CentRAG serves in its <code>KNOWLEDGE_QA</code> path.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">Why keep Qdrant if we want to minimize vector usage?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Because Qdrant serves two distinct roles in CentRAG, not one:</p>
+          <ul>
+            <li><strong>L3 semantic cache backend:</strong> Stores embeddings of past queries + responses. Even a fully vectorless retrieval pipeline still benefits from semantic deduplication of repeated questions. This is low-volume, high-value usage.</li>
+            <li><strong>Vector fallback retriever:</strong> When CRAG evaluates BM25/structural context as insufficient, the agentic router escalates to Qdrant. This is the safety net that prevents quality regressions.</li>
+          </ul>
+          <p>Keeping Qdrant behind a pluggable interface means you can swap it out (Weaviate, Pinecone, Chroma) without touching the orchestration layer. The goal isn't to eliminate it — it's to make it a deliberate fallback, not the default first call.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How does multi-tenancy work in CentRAG?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Each team is assigned a <code>namespace</code>. The orchestrator loads a <code>strategy_id</code> per namespace that controls: which retrievers run, whether PageIndex or vector is used for docs, which memory backend to use, CRAG thresholds, and L3 cache scope.</p>
+          <p>Isolation at each layer: the vector store uses namespace-scoped collection filters; the memory backend (Supermemory/Mem0/HydraDB) is tenant-keyed; the L3 semantic cache is namespace-partitioned so Team A's query hits never resolve to Team B's data.</p>
+          <p>Governance = enabling/disabling MCP servers per namespace. Need Team A to access Neptune but not Team B? Disable that MCP server for Team B's <code>strategy_config</code>. This makes access control declarative and auditable.</p>
+          <div class="warn-box">The most common real-world failure: incorrect namespace propagation through the retrieval chain. Audit every retrieval node to confirm namespace is threaded as a mandatory filter, not an optional parameter.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What does the SIMPLE / STANDARD / COMPLEX / RESEARCH routing actually do?<em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>These are CentRAG's four query complexity tiers, each triggering a different retrieval + reasoning strategy:</p>
+          <ul>
+            <li><strong>SIMPLE:</strong> Single-retriever path. Usually SQL or log filter via MCP. No CRAG refinement loop. Lowest latency and cost.</li>
+            <li><strong>STANDARD:</strong> One or two retrievers, single CRAG pass. Covers most structured + known-doc queries.</li>
+            <li><strong>COMPLEX:</strong> Multi-retriever (e.g. graph + docs + memory). Multiple CRAG passes allowed. Memory MCP retrieval injected. Used for cross-domain, multi-hop questions.</li>
+            <li><strong>RESEARCH:</strong> Full agentic loop — planning, iterative retrieval, web search fallback, multi-step reasoning. Highest accuracy but also highest cost and latency. Reserved for genuinely hard queries where a simple answer is known to be insufficient.</li>
+          </ul>
+          <p>The router makes this classification before any retrieval happens, based on query features (question length, entity count, keyword signals, namespace-specific patterns). You can override per-namespace defaults in the <code>strategy_config</code>.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-cat">
+      <div class="faq-cat-title">Hard Technical Questions</div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How does the CRAG evaluator actually work under the hood?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>The CRAG retrieval evaluator is an LLM-based binary/ternary classifier. After any retrieval step, it receives <code>(query, retrieved_context)</code> and returns one of: <strong>Correct</strong>, <strong>Incorrect</strong>, or <strong>Ambiguous</strong>.</p>
+          <p>Decision routing: <code>Correct</code> → proceed to generation. <code>Incorrect</code> → discard context, rewrite query, fall back to web search or alternative retriever. <code>Ambiguous</code> → refine by stripping irrelevant chunks, combine with web results, or ask the user a disambiguation question.</p>
+          <p>Implementation options: (1) Use a small fine-tuned relevance scorer (7B model trained on CRAG benchmark data). (2) Use your production LLM with a structured prompt + JSON output for the grade. (3) Use a dedicated reranker (Cohere, cross-encoders) as a proxy for relevance scoring.</p>
+          <div class="warn-box">In Horizon 1, deploy CRAG as a read-only quality monitor (logs scores, makes zero routing decisions). Only enable routing in Horizon 2 once thresholds are calibrated against your internal golden sets. Miscalibrated CRAG causes more retrieval loops than necessary and increases latency significantly.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What is the difference between Supermemory, Mem0, and HydraDB — and which should CentRAG use?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p><strong>Mem0</strong> extracts and stores key facts from conversations using an LLM extraction step. Lightweight, open-source, easy to self-host. Best for short-term user preference memory. Weakness: no built-in temporal decay or long-horizon reasoning across sessions.</p>
+          <p><strong>Supermemory</strong> targets personalized, long-term AI memory with an emphasis on knowledge consolidation across sessions. REST API, semantic deduplication of stored facts, near-100% benchmark scores on personalization tasks. Good for user-facing assistants where personalization matters.</p>
+          <p><strong>HydraDB</strong> is purpose-built for agent memory at scale. It handles temporal semantics natively (memory decay, recency weighting), supports graph-like memory structures (entities, relationships, events), and is designed for multi-agent, multi-session memory. More complex to operate but best for CentRAG's COMPLEX/RESEARCH routing tiers where past architectural decisions affect current answers.</p>
+          <div class="tip-box">Recommended path: Start with Mem0 (fastest to integrate) behind a memory MCP interface. Design the interface to be swappable. Migrate to HydraDB in H3 when you need temporal decay and graph-aware memory for multi-hop reasoning scenarios. Never couple the orchestrator directly to a memory library — always go through the MCP interface.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How does a LangGraph state machine implement the CRAG + Agentic routing flow?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>The LangGraph state machine is a directed graph of nodes (Python functions) and edges (conditional routing). The CentRAG flow looks like this:</p>
+          <ul>
+            <li><code>classify_query</code> → sets <code>state.query_type</code> to STRUCTURED / LOG / GRAPH / DOC_KB</li>
+            <li><code>check_cache</code> → checks L1/L2/L3; if hit, jumps to <code>return_cached</code></li>
+            <li>Conditional edge: routes to <code>retrieve_structured</code>, <code>retrieve_log</code>, <code>retrieve_graph</code>, or <code>retrieve_doc</code> based on <code>query_type</code></li>
+            <li><code>crag_evaluate</code> → grades context; sets <code>state.crag_grade</code></li>
+            <li>Conditional edge: <code>Correct</code> → <code>generate</code>; <code>Incorrect</code> → <code>retrieve_fallback</code>; <code>Ambiguous</code> → <code>refine_or_clarify</code></li>
+            <li><code>retrieve_memory</code> runs in parallel with the main retrieval path, injecting long-term user/team context into the generation prompt</li>
+            <li><code>generate</code> → calls LLM, applies guardrails, caches result</li>
+          </ul>
+          <p>Each node is a Python function; edges are conditional based on state fields. Nodes can loop (CRAG can trigger multiple retrieval refinement passes) while the graph controls max iterations via a <code>retry_count</code> in state. LangGraph's <code>add_conditional_edges()</code> maps state values to node names — this is what makes the routing declarative and testable.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">Long-context LLMs are getting bigger — will RAG become obsolete?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>This is the most debated question in the space right now (2026). The honest answer is: long-context replaces <em>naive chunk-top-k RAG</em> in certain conditions, but not enterprise RAG at CentRAG's scale.</p>
+          <p>Where long-context wins: small-to-medium, well-bounded document sets where stuffing everything into context is affordable. Quality is genuinely comparable or better than chunk RAG in these cases (benchmarks confirm this for corpora under ~500K tokens).</p>
+          <p>Where RAG still dominates: large corpora across many tenants (you cannot stuff 10,000 Confluence pages into every query), real-time and frequently updated data, cost sensitivity (1M-token context at current pricing = prohibitive per-query cost), and multi-source synthesis where retrieval precision matters.</p>
+          <div class="tip-box">The pragmatic CentRAG approach: use long-context <em>as a retrieval mode</em> for small targeted doc sets (BM25 → pick top 3 docs → full-text into 200K context window), not as a universal replacement. CRAG evaluator decides when this mode is better than chunked retrieval. This hybrid is already a recognized best practice in 2026.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How do you benchmark CentRAG and what metrics actually matter?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>The metrics that matter, by layer:</p>
+          <ul>
+            <li><strong>Retrieval quality:</strong> Context Recall (did we retrieve the right docs?), Context Precision (did we retrieve only relevant docs?), MRR@k</li>
+            <li><strong>Generation quality:</strong> Faithfulness (is the answer grounded in retrieved context — no hallucination?), Answer Relevancy, Answer Correctness vs golden set</li>
+            <li><strong>CRAG-specific:</strong> Evaluator accuracy (does CRAG's grade match human judgment?), false correction rate (CRAG triggering refinement when the original context was fine)</li>
+            <li><strong>System metrics:</strong> Cache hit rate (L1/L2/L3 separately), latency P50/P95/P99, cost per query (token spend), retrieval mode distribution (how often each path fires)</li>
+          </ul>
+          <p>Tools: RAGAS framework for retrieval + faithfulness metrics. FlashRAG for benchmarking against standard datasets. Internal golden sets per team namespace for domain-specific accuracy. Dashboard per <code>strategy_id</code> so you can see which strategy performs best for which team.</p>
+          <div class="warn-box">Build the golden sets first, before tuning. Without them, every "improvement" is anecdotal. Target 50–100 Q&A pairs per namespace with expert-verified answers.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How do you handle temporal memory decay in a multi-session agent system?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Temporal memory decay ensures old context doesn't corrupt new answers. The problem: a team's architecture decisions from 6 months ago might be obsolete, but a naive memory system surfaces them as confidently as yesterday's decision.</p>
+          <p>Implementation options:</p>
+          <ul>
+            <li><strong>Timestamp-weighted retrieval:</strong> Score memory hits by <code>semantic_similarity × recency_score</code>. Recency score decays exponentially: <code>e^(-λ × age_in_days)</code> where λ controls decay speed.</li>
+            <li><strong>TTL-based eviction:</strong> Tag memory entries with an expiration. Operational facts (incident logs) expire in days; policy documents in months; architecture facts in quarters.</li>
+            <li><strong>HydraDB's native approach:</strong> Stores memory as time-indexed events with built-in recency weighting during retrieval. Much simpler to configure than rolling your own.</li>
+            <li><strong>Contradiction detection:</strong> On memory write, check if the new fact contradicts an existing memory. If so, mark the old one as superseded rather than adding both.</li>
+          </ul>
+          <p>CentRAG's memory MCP interface should expose: <code>get_relevant_memory(query, namespace, max_age_days)</code> so callers can bound the temporal window per query type.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What security and privacy risks are unique to a multi-tenant RAG platform?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>The risks that don't exist in single-tenant RAG:</p>
+          <ul>
+            <li><strong>Cross-tenant data leakage via semantic cache:</strong> An L3 cache hit returns a cached answer — if namespace isolation is misconfigured, Team A's query could resolve to Team B's cached response. Defense: always include namespace in the cache key and filter.</li>
+            <li><strong>Memory poisoning:</strong> A malicious or buggy agent writes false facts into the shared memory backend. Defense: write-only memory via trusted paths; memory writes require explicit tool calls, not open-ended generation.</li>
+            <li><strong>Prompt injection via retrieved documents:</strong> A retrieved Confluence page could contain embedded instructions ("ignore previous instructions and..."). Defense: retrieved context should be passed as data, not as instructions. Use structured prompt templates that clearly delineate context from instructions.</li>
+            <li><strong>Embedding inversion attacks:</strong> In theory, embeddings can be partially inverted to recover source text. Defense: don't embed PII; use namespace-scoped collections so embeddings from different tenants are never co-mixed.</li>
+          </ul>
+          <div class="warn-box">The most common real-world failure: incorrect namespace propagation through the retrieval chain. Audit every retrieval node to confirm namespace is threaded as a mandatory filter, not an optional parameter. Read OWASP LLM Top 10 before multi-tenant production launch.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What is RAPTOR and when should CentRAG use it?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval) builds a hierarchical tree of summaries from documents: it embeds leaf chunks AND their summaries AND summaries-of-summaries. This dramatically reduces the number of embeddings required while improving long-range context retrieval.</p>
+          <p>When to use in CentRAG: When you have large, well-structured documents (architectural runbooks, long policy documents) where a user might ask cross-section questions that require understanding multiple parts of the document. RAPTOR lets you answer "what is the overall philosophy of our deployment strategy?" without retrieving specific chunks — the summary node contains that abstraction.</p>
+          <p>When NOT to use: Small corpora (PageIndex is better), highly factual/exact-answer queries (chunk retrieval is more precise), and structured data (use SQL). RAPTOR adds an indexing overhead cost and complexity that isn't worth it for simple lookup queries.</p>
+          <div class="info-box">Think of RAPTOR as a "minimal vectors" strategy: you embed much less content (summaries are smaller than all raw chunks combined) while maintaining broad semantic coverage. It fits cleanly into CentRAG's goal of minimizing embedding maintenance overhead.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How does GraphRAG build and query the knowledge graph for CentRAG?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>CentRAG's GraphRAG path targets entity-rich, relationship-heavy domains: service ownership, incident graphs, dependency graphs, and org hierarchies. The build process:</p>
+          <ul>
+            <li><strong>Entity extraction:</strong> An LLM pass over incident reports, service catalogs, and runbooks extracts entities (services, teams, deployments, error codes) and relationships (depends_on, owned_by, caused_by).</li>
+            <li><strong>Graph store:</strong> Neptune (or Neo4j) stores these as nodes and edges with properties (timestamps, severity, version).</li>
+            <li><strong>Retrieval:</strong> For a GRAPH_QA query, the LLM translates the natural language question into Cypher/Gremlin. The resulting subgraph (a few nodes + edges) is extracted and converted to text. This text is fused with any document context for generation.</li>
+          </ul>
+          <p>The key design decision: the GraphRAG retriever is exposed via MCP so the LangGraph orchestrator calls it like any other tool. It doesn't need special orchestration — it's just another retrieval option in the router's toolkit.</p>
+          <div class="tip-box">Best domains for GraphRAG in CentRAG: incident root cause analysis ("what services depend on the failing service?"), ownership queries ("who is responsible for this alert?"), and multi-hop KB questions ("what policies govern this team's data handling?").</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">How does LangGraph's checkpointing support CentRAG's long-running agentic flows?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>LangGraph's built-in checkpointing serializes the full graph state (including messages, retrieved docs, CRAG grades, retry counts) to a persistent store (Postgres, Redis, or SQLite) at each node transition. This enables:</p>
+          <ul>
+            <li><strong>Resumability:</strong> If a RESEARCH-tier query times out or the LLM provider is temporarily unavailable, the orchestrator can resume from the last checkpoint rather than starting over. Critical for multi-step, multi-minute research flows.</li>
+            <li><strong>Human-in-the-loop:</strong> The graph can pause at a <code>clarify</code> node, persist state, return a question to the user, and resume when the user responds — even if that response arrives 10 minutes later.</li>
+            <li><strong>Debugging:</strong> LangSmith and LangGraph Studio can replay a specific checkpoint sequence to diagnose why a particular CRAG routing decision was made.</li>
+          </ul>
+          <p>Implementation: use <code>MemorySaver</code> for development, <code>SqliteSaver</code> or <code>PostgresSaver</code> for production. Pass the <code>thread_id</code> (your <code>trace_id</code>) as the checkpointing key so each unique query flow has its own checkpoint chain.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="tq(this)">What does "vectorless RAG" look like in practice for CentRAG's data sources?<span class="hard-badge">Hard</span><em class="faq-icon">+</em></button>
+        <div class="faq-a">
+          <p>Per source type, the realistic vectorless picture is:</p>
+          <ul>
+            <li><strong>GOS DB / Athena / DynamoDB:</strong> 100% vectorless. Agent uses schema introspection via MCP + SQL/aggregation queries. The LLM explains the result. No chunking, no embeddings.</li>
+            <li><strong>Logs:</strong> ~90% vectorless. Primary retrieval via time bounds, service filters, error class, correlation IDs. Aggregated views (hourly error counts, DAG failure summaries) produced via SQL/OLAP. Embeddings only for free-text semantic search on log messages (edge case).</li>
+            <li><strong>Confluence / Jira / PDFs:</strong> 60–70% vectorless is achievable using BM25 page-level index + PageIndex structural navigation for well-structured docs. The remaining 30–40% (semantically phrased, long-tail questions on large corpora) still needs vector fallback to avoid quality regressions.</li>
+          </ul>
+          <div class="warn-box">BM25 struggles with semantic paraphrases — "salary bands" vs "compensation tiers" will fail to match. If your users ask in business language while docs are written in technical language, expect vector fallback to trigger frequently. Calibrate your CRAG threshold accordingly.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PHASES ===== -->
+  <div class="sec" id="phases">
+    <div class="sec-heading">CentRAG Implementation — 4-Horizon Roadmap</div>
+
+    <div class="phase-card">
+      <div class="phase-head">
+        <div class="phase-badge pb-1">H1</div>
+        <div class="phase-meta">
+          <div class="phase-title">Baseline + Safety Foundation</div>
+          <div class="phase-timeline">Weeks 1–6 · Plumbing with zero accuracy risk</div>
+        </div>
+      </div>
+      <div class="phase-obj">Goal: Add observability and MCP connectors without touching retrieval accuracy. Every step in this phase is fully reversible. Ship to production by week 4 — this phase is safe to release continuously.</div>
+      <div class="phase-tasks">
+        <div class="task-row"><div class="task-dot td-1"></div>Add <code>strategy_id</code> and <code>trace_id</code> to every query path. Thread them through all logs and downstream calls. Existing behavior completely unchanged.</div>
+        <div class="task-row"><div class="task-dot td-1"></div>Stand up MCP servers for GOS DB, Athena, and app logs. Switch STRUCTURED and LOG retrieval to call these MCP tools. No embedding involved — pure plumbing.</div>
+        <div class="task-row"><div class="task-dot td-1"></div>Deploy CRAG evaluator in read-only mode: it scores retrieval quality and logs results but makes zero routing decisions. Use this to gather calibration data.</div>
+        <div class="task-row"><div class="task-dot td-1"></div>Build internal golden sets for 2 high-traffic namespaces. 50–100 verified Q&A pairs per namespace. This is the measurement baseline for all future phases — without it, all future "improvements" are guesses.</div>
+        <div class="task-row"><div class="task-dot td-1"></div>Set up RAGAS and FlashRAG evaluation pipelines. Run weekly batch evals against golden sets. Establish baseline faithfulness and context recall scores.</div>
+        <div class="task-row"><div class="task-dot td-1"></div>Add LangSmith/Langfuse tracing. Every query should have a full trace: classify → cache check → retrieve → CRAG eval → generate. Every hop needs a trace span.</div>
+      </div>
+      <div class="deliverable-box"><span class="del-label">Delivers:</span><span class="del-items">Full observability · MCP fabric for structured/log data · CRAG scoring baseline · Golden sets · Weekly eval pipeline</span></div>
+    </div>
+
+    <div class="phase-connector">↓</div>
+
+    <div class="phase-card">
+      <div class="phase-head">
+        <div class="phase-badge pb-2">H2</div>
+        <div class="phase-meta">
+          <div class="phase-title">Quality Levers — Active CRAG + Structural Docs</div>
+          <div class="phase-timeline">Weeks 7–16 · Quality gates and retrieval mode diversity</div>
+        </div>
+      </div>
+      <div class="phase-obj">Goal: Turn CRAG into an active routing gate and introduce vectorless document retrieval. Compare all modes head-to-head vs chunk+vector baseline using the golden sets from H1. No "improvement" without data to back it.</div>
+      <div class="phase-tasks">
+        <div class="task-row"><div class="task-dot td-2"></div>Enable CRAG routing: on <code>Incorrect</code> → trigger vector fallback. On <code>Ambiguous</code> → refine query. Tune thresholds from H1 calibration scores. Deploy to one namespace first.</div>
+        <div class="task-row"><div class="task-dot td-2"></div>Implement PageIndex-style structural DOC retriever for 1–2 high-value namespaces (architecture docs, runbooks). Run A/B comparison against chunk+vector baseline on golden sets for 2 consecutive weeks before expanding.</div>
+        <div class="task-row"><div class="task-dot td-2"></div>Activate L3 semantic cache (Qdrant-backed) per namespace. Measure cache hit rate and latency reduction weekly. Target 30%+ hit rate within 4 weeks of activation.</div>
+        <div class="task-row"><div class="task-dot td-2"></div>Deploy internal memory MCP using Mem0 for selected teams. Temporal context injected into COMPLEX queries. Measure answer quality improvement on multi-session queries.</div>
+        <div class="task-row"><div class="task-dot td-2"></div>Introduce long-context retrieval mode for small doc namespaces (BM25 doc select → full-text into 200K LLM context). Gate via CRAG: only activate for namespaces where this mode beats chunk+vector on golden sets.</div>
+        <div class="task-row"><div class="task-dot td-2"></div>Expand golden sets to 4–6 namespaces. Begin per-strategy dashboards: faithfulness, context recall, cache hit rate, cost per query — all broken down by <code>strategy_id</code>.</div>
+      </div>
+      <div class="deliverable-box"><span class="del-label">Delivers:</span><span class="del-items">Active CRAG routing · Structural doc retriever (A/B validated) · L3 semantic cache live · Memory layer (Mem0) for selected teams · Long-context mode</span></div>
+    </div>
+
+    <div class="phase-connector">↓</div>
+
+    <div class="phase-card">
+      <div class="phase-head">
+        <div class="phase-badge pb-3">H3</div>
+        <div class="phase-meta">
+          <div class="phase-title">Graph RAG + Evaluation Infrastructure</div>
+          <div class="phase-timeline">Weeks 17–26 · Multi-hop reasoning and data-driven decisions</div>
+        </div>
+      </div>
+      <div class="phase-obj">Goal: Add GraphRAG for entity-rich domains (incident graphs, ownership, service dependencies) and build the evaluation infrastructure that justifies decisions to leadership with hard numbers.</div>
+      <div class="phase-tasks">
+        <div class="task-row"><div class="task-dot td-3"></div>Build service/incident knowledge graph in Neptune. Populate from existing incident reports, ownership data, and service catalogs. Start small — one domain only.</div>
+        <div class="task-row"><div class="task-dot td-3"></div>Implement GraphRAG retriever: LLM-driven Cypher/Gremlin query generation → subgraph extraction → text fusion. Expose via MCP so the agentic router treats it like any other tool.</div>
+        <div class="task-row"><div class="task-dot td-3"></div>Launch per-strategy dashboards: faithfulness, context recall, cache hit rate, latency P95, cost per query — all broken down by <code>strategy_id</code>. Stakeholder-facing reporting view.</div>
+        <div class="task-row"><div class="task-dot td-3"></div>Introduce simple strategy promotion logic: if Strategy B outperforms Strategy A for Namespace X on golden sets for 2 consecutive evaluation weeks, auto-promote B (or flag for manual promotion with evidence).</div>
+        <div class="task-row"><div class="task-dot td-3"></div>Upgrade memory backend to HydraDB for teams that need temporal decay and cross-session entity tracking. Keep Mem0 for simpler namespaces — use the MCP interface to make the swap transparent to the orchestrator.</div>
+        <div class="task-row"><div class="task-dot td-3"></div>Add RAPTOR-style hierarchical indexing for 1–2 large-corpus namespaces. Compare vs flat chunk+vector on faithfulness for cross-section questions.</div>
+      </div>
+      <div class="deliverable-box"><span class="del-label">Delivers:</span><span class="del-items">GraphRAG via Neptune MCP · Eval dashboards + strategy promotion · HydraDB memory for advanced namespaces · RAPTOR indexing</span></div>
+    </div>
+
+    <div class="phase-connector">↓</div>
+
+    <div class="phase-card">
+      <div class="phase-head">
+        <div class="phase-badge pb-4">H4</div>
+        <div class="phase-meta">
+          <div class="phase-title">Platform Maturity + Agentic Extensions</div>
+          <div class="phase-timeline">Weeks 27+ · Production hardening and beyond-RAG capabilities</div>
+        </div>
+      </div>
+      <div class="phase-obj">Goal: Harden CentRAG as a production platform and extend it beyond RAG toward general agentic workloads — code assist, workflow automation, multi-agent orchestration. RAG becomes one capability in a broader agent platform.</div>
+      <div class="phase-tasks">
+        <div class="task-row"><div class="task-dot td-4"></div>Multi-agent support: allow sub-agents to call CentRAG as a tool via MCP, enabling RAG-as-a-service for downstream agents. CentRAG becomes a composable component in any MCP-aware agent system.</div>
+        <div class="task-row"><div class="task-dot td-4"></div>Implement bandit-based strategy selection: ε-greedy or Thompson Sampling to continuously exploit better strategies per namespace. Strategies evolve without manual tuning.</div>
+        <div class="task-row"><div class="task-dot td-4"></div>Full guardrails layer: PII detection, hallucination scoring, output content policies — per-namespace configurable. Implement as a post-generation node in the LangGraph flow.</div>
+        <div class="task-row"><div class="task-dot td-4"></div>SLA enforcement: per-namespace latency budgets, cost caps, query rate limits exposed via the strategy config. Dashboard alerts when budgets are approached.</div>
+        <div class="task-row"><div class="task-dot td-4"></div>Publish internal developer SDK so other teams can onboard new namespaces without infra involvement. Namespace onboarding should be a 30-minute self-service process.</div>
+        <div class="task-row"><div class="task-dot td-4"></div>Explore extension to code-assist, workflow automation, and other agentic workloads using the same MCP connector fabric. CentRAG's retrieval + memory layer generalizes beyond Q&A.</div>
+      </div>
+      <div class="deliverable-box"><span class="del-label">Delivers:</span><span class="del-items">Multi-agent support · Self-tuning strategies (bandits) · Enterprise guardrails · Developer SDK · Agentic extensions roadmap</span></div>
+    </div>
+  </div>
+
+  <!-- ===== LEARNING ===== -->
+  <div class="sec" id="learn">
+    <div class="sec-heading">What to Learn Before Diving In</div>
+
+    <span class="lr-tier-label lt-1">Tier 1 — Foundations · Must know first</span>
+    <div class="lr-cards">
+      <div class="lr-card">
+        <div class="lc-title">RAG fundamentals</div>
+        <div class="lc-body">Understand the basic retrieve → augment → generate loop. Know what chunking, embeddings, and vector similarity search do and why they exist. The foundation everything else builds on — even if CentRAG minimizes them, you need to know the baseline to know when to deviate.</div>
+        <span class="res-tag">LangChain docs · RAGFlow blog 2025</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Embeddings + vector stores</div>
+        <div class="lc-body">Know how dense vector representations work, why cosine similarity finds "semantically similar" text, and how Qdrant/Pinecone/Chroma index and query them. Even if you minimize vectors, you need to understand the baseline to make informed decisions about when to deviate.</div>
+        <span class="res-tag">Qdrant docs · OpenAI embeddings guide</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">LangChain + LangGraph basics</div>
+        <div class="lc-body">CentRAG's orchestration is LangGraph. Understand: Chains, Agents, Tools, and then LangGraph's state machine model — nodes, edges, conditional routing, TypedDict state schema. Spend real time on LangGraph; it's the core framework. Build a 3-node flow before touching CentRAG.</div>
+        <span class="res-tag">LangGraph docs · LangChain Academy</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Python async patterns</div>
+        <div class="lc-body">CentRAG runs concurrent retrieval paths (memory + retrieval in parallel). Know asyncio, async/await, and how LangGraph handles async nodes. Most of the performance work happens here — misusing sync code in async contexts causes hard-to-debug latency spikes.</div>
+        <span class="res-tag">Python asyncio docs</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Basic LLM API usage</div>
+        <div class="lc-body">Know how to make structured calls to Anthropic/OpenAI APIs: tool calling, structured JSON outputs, system prompts, multi-turn conversations. CentRAG uses tool calling heavily — both for the LLM-as-router pattern and for MCP tool dispatch.</div>
+        <span class="res-tag">Anthropic docs · OpenAI API reference</span>
+      </div>
+    </div>
+
+    <div class="lr-divider"></div>
+    <span class="lr-tier-label lt-2">Tier 2 — Core RAG Stack · Learn in parallel with Tier 1</span>
+    <div class="lr-cards">
+      <div class="lr-card">
+        <div class="lc-title">Corrective RAG (CRAG)</div>
+        <div class="lc-body">Read the original CRAG paper (arXiv 2401.15884). Understand the retrieval evaluator: how it classifies context, what the routing decision logic looks like, and how it was originally implemented with a lightweight fine-tuned model. Then study the LangChain CRAG cookbook implementation.</div>
+        <span class="res-tag">arXiv:2401.15884 · LangChain CRAG cookbook</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Agentic RAG patterns</div>
+        <div class="lc-body">Study how agents plan over multiple retrieval steps: self-querying, query decomposition, iterative refinement. Understand tool-calling in Anthropic/OpenAI APIs. Build a simple 3-step agentic retrieval loop with LangGraph before building CentRAG's version.</div>
+        <span class="res-tag">arXiv:2501.09136 · FutureAGI blog</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">BM25 + hybrid retrieval</div>
+        <div class="lc-body">Know how BM25 works (TF-IDF variant), why it beats dense retrieval on exact keyword matches, and how hybrid retrieval (BM25 + dense, rank-fused) outperforms either alone. Elasticsearch, OpenSearch, or Qdrant's sparse hybrid are your tools. This is what makes vectorless modes viable.</div>
+        <span class="res-tag">Elasticsearch docs · BEIR benchmark</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">MCP protocol</div>
+        <div class="lc-body">Read the MCP spec from modelcontextprotocol.io. Build a toy MCP server using Python FastMCP. Understand: tools vs resources vs prompts, the JSON-RPC wire format, and how LangGraph nodes call MCP tools. This unlocks all of CentRAG's external system integrations.</div>
+        <span class="res-tag">modelcontextprotocol.io · FastMCP</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Reranking</div>
+        <div class="lc-body">Understand cross-encoders vs bi-encoders. Cohere Rerank, BGE rerankers, and Sentence-Transformers cross-encoders all work. Reranking is often more impactful per unit of effort than better chunking. It fits naturally after BM25 or vector retrieval as a quality booster before CRAG evaluation.</div>
+        <span class="res-tag">Cohere docs · SBERT docs</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Semantic caching</div>
+        <div class="lc-body">Understand how to embed a query → store in a vector index → on new query, find nearest cached embedding → threshold check for cache hit. Study GPTCache, Redis LangCache, or build a minimal version to internalize the trade-offs around staleness and namespace isolation.</div>
+        <span class="res-tag">Redis LangCache docs · GPTCache GitHub</span>
+      </div>
+    </div>
+
+    <div class="lr-divider"></div>
+    <span class="lr-tier-label lt-3">Tier 3 — Advanced Topics · After Tier 1 + 2 are solid</span>
+    <div class="lr-cards">
+      <div class="lr-card">
+        <div class="lc-title">Graph RAG</div>
+        <div class="lc-body">Study Microsoft's GraphRAG implementation and the "Awesome GraphRAG" repo. Understand knowledge graph construction, Cypher/Gremlin query generation by LLMs, and subgraph extraction. Build a small graph over your own incident data first before tackling Neptune integration.</div>
+        <span class="res-tag">microsoft/graphrag · DEEP-PolyU/Awesome-GraphRAG</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">RAPTOR / hierarchical indexing</div>
+        <div class="lc-body">RAPTOR builds a tree of summaries — embed leaf chunks AND their summaries AND summary-of-summaries. This reduces the number of embeddings while improving long-range context retrieval. Study the RAPTOR paper (arXiv:2401.18059) and build a small toy version over a multi-section doc.</div>
+        <span class="res-tag">RAPTOR paper · arXiv:2401.18059</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Long-context vs RAG</div>
+        <div class="lc-body">Read recent benchmarks on 200K–1M context models vs chunk RAG (RAGFlow blog 2025, arXiv:2502.09891). Understand where long-context wins (small, bounded corpora) and where it loses (cost, large multi-tenant knowledge bases). This informs CentRAG's long-context mode gating decisions.</div>
+        <span class="res-tag">arXiv:2502.09891 · RAGFlow blog 2025</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Memory systems (Mem0 / HydraDB)</div>
+        <div class="lc-body">Understand how Mem0 extracts and stores facts vs how HydraDB handles temporal decay and entity-level memory. Build a simple memory layer: write-on-generate, read-before-generate, with recency weighting. The memory MCP interface abstracts the backend — understand the interface before the implementation.</div>
+        <span class="res-tag">mem0.ai · hydradb.com/blog</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">PageIndex / vectorless retrieval</div>
+        <div class="lc-body">Study PageIndex (pageindex.ai). Understand how an LLM navigates a document's structural tree without embeddings. Build a toy version: parse a PDF's headings into a tree, write a loop where the LLM picks which node to expand next. This is the core of CentRAG's structural doc retriever.</div>
+        <span class="res-tag">pageindex.ai/blog · buildfastwithai.com</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">RAG evaluation frameworks</div>
+        <div class="lc-body">Learn RAGAS (context recall, faithfulness, answer relevancy, answer correctness). Set up FlashRAG for benchmark runs. Build golden sets: 50–100 Q&A pairs per namespace with expert-verified answers. Without evaluation infrastructure, you cannot tell if you're improving. This is non-negotiable for H1.</div>
+        <span class="res-tag">RAGAS docs · FlashRAG GitHub</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Self-RAG + Adaptive RAG</div>
+        <div class="lc-body">Self-RAG trains a model to decide when to retrieve, what to retrieve, and how to evaluate its own output. Adaptive RAG adjusts retrieval complexity based on query difficulty. Both are related to CRAG but add self-reflection loops. Study the papers, then understand how CentRAG's CRAG + Agentic routing approximates these patterns without fine-tuning.</div>
+        <span class="res-tag">Self-RAG paper · Adaptive RAG · LangGraph tutorials</span>
+      </div>
+    </div>
+
+    <div class="lr-divider"></div>
+    <span class="lr-tier-label lt-4">Tier 4 — Ops + Scale · When building for production</span>
+    <div class="lr-cards">
+      <div class="lr-card">
+        <div class="lc-title">Multi-tenancy patterns</div>
+        <div class="lc-body">Namespace isolation in vector stores (partition-per-tenant vs collection-per-tenant trade-offs), namespace propagation through distributed systems. One bug here leaks data across teams. Study Qdrant's multi-tenancy docs carefully before going to production.</div>
+        <span class="res-tag">Qdrant multi-tenancy docs</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">LLM cost management</div>
+        <div class="lc-body">Token counting, cost per retrieval path, cache ROI calculation, prompt compression (LLMLingua, PromptCrunch). CentRAG's semantic cache directly reduces spend — measure it. Know how to calculate cost per query by retrieval path so you can justify architectural decisions financially.</div>
+        <span class="res-tag">LLMLingua · Anthropic pricing docs</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Observability for LLM systems</div>
+        <div class="lc-body">LangSmith, Langfuse, or Arize Phoenix for tracing. Understand how to trace a single query across: classify → cache check → retrieve → CRAG eval → generate. Every hop needs a trace span. LangGraph integrates natively with LangSmith — set this up in H1 before any quality work.</div>
+        <span class="res-tag">LangSmith · Langfuse · Arize Phoenix</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Prompt injection + RAG security</div>
+        <div class="lc-body">Prompt injection via retrieved docs, cross-tenant cache leakage, embedding inversion, memory poisoning. Know the attack surface before going multi-tenant in production. Read OWASP LLM Top 10. These risks are unique to multi-tenant RAG and often overlooked until they cause an incident.</div>
+        <span class="res-tag">OWASP LLM Top 10</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">LangGraph checkpointing + HITL</div>
+        <div class="lc-body">Understand LangGraph's MemorySaver, SqliteSaver, and PostgresSaver. Know how to pause a graph at a clarify node, persist state, and resume when a user responds. Human-in-the-loop (HITL) is essential for CentRAG's RESEARCH tier where ambiguous queries need user input before proceeding.</div>
+        <span class="res-tag">LangGraph checkpoint docs</span>
+      </div>
+      <div class="lr-card">
+        <div class="lc-title">Bandit algorithms for strategy selection</div>
+        <div class="lc-body">Understand ε-greedy and Thompson Sampling for multi-armed bandits. In H4, CentRAG uses bandits to auto-promote better retrieval strategies per namespace. You don't need deep math — understand the explore/exploit trade-off and how to implement a simple version for strategy routing.</div>
+        <span class="res-tag">arXiv: MBA-RAG · Bandit tutorial</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function sw(id,btn){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  btn.classList.add('on');
+}
+function tq(btn){
+  const a=btn.nextElementSibling;
+  const ic=btn.querySelector('.faq-icon');
+  const open=a.classList.contains('open');
+  a.classList.toggle('open',!open);
+  ic.textContent=open?'+':'−';
+  ic.style.transform=open?'':'rotate(45deg)';
+}
+</script>
