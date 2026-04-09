@@ -62,7 +62,9 @@ create_app()                                          # centrag/app.py:159
 │
 ├── app = FastAPI(title="CentRAG", lifespan=lifespan) # app.py:168
 │
-├── CORSMiddleware added                              # app.py:178
+├── CORSMiddleware added (strict origins)             # app.py:180
+│
+├── SimpleRateLimitMiddleware added                   # app.py:187
 │
 ├── Routes mounted:
 │   ├── health_router                                 # centrag/routes/health.py
@@ -596,16 +598,24 @@ Retrieval flow:
 | [metrics.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/metrics.py) | `EvaluationMetrics`, `EvaluationReport` | Aggregate per-judge, per-difficulty |
 | [comparator.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/comparator.py) | `PathComparator` | Side-by-side: pageindex vs vector |
 
+**CI Automation:** `ai-evals.yml` automatically triggers this test suite on any pull requests modifying chunking or retrieval pipelines.
+
 ---
 
 ## File Map
 
 ```
 centrag/
+├── .github/                        Enterprise CI/CD definitions
+│   └── workflows/
+│       ├── enterprise-ci.yml         Ruff, Mypy, Bandit, Auto-Graph Sync
+│       └── ai-evals.yml              Automated evaluation of RAG responses
+│
 ├── app.py                          create_app() → FastAPI factory
 ├── config.py                       Settings (Pydantic, CENTRAG_* env vars)
 ├── wiring.py                       build_retrieval_engine(), build_ingestion_service()
 ├── models.py                       SQLAlchemy async models + RLS
+├── Makefile                        Central build system + Security Entrypoints
 │
 ├── abstractions/                   Protocol definitions (10 contracts)
 │   ├── embedder.py                   EmbedderProtocol
@@ -691,7 +701,8 @@ centrag/
 │
 ├── middleware/                     FastAPI middleware
 │   ├── auth.py                       API key auth + team resolution
-│   └── slow_logger.py                Slow request logging
+│   ├── slow_logger.py                Slow request logging
+│   └── rate_limiter.py               SimpleRateLimitMiddleware (Throttling)
 │
 └── mcp_bridge/                     Model Context Protocol
     ├── rag_as_mcp_tool.py            Expose CentRAG as MCP tool
@@ -699,7 +710,10 @@ centrag/
 
 tests/                              202 tests (pytest + pytest-asyncio)
 docs/                               34 documentation files
-.code-review-graph/                 Structural code graph (715 nodes, 3529 edges)
+├── adr/                            Architecture Decision Records
+│   ├── 0001-use-composition-root-for-dependency-injection.md
+│   └── 0002-parent-child-chunking-strategy.md
+.code-review-graph/                 Structural code graph (1318 nodes, 7605 edges)
 ```
 
 ---
