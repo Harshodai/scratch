@@ -118,6 +118,11 @@ curl -X POST http://localhost:8000/v1/retrieve \
 
 | Feature | Description | Docs |
 |---------|-------------|------|
+| **AI Engineering** | Automatic `eval_ragas` validation of embedding logic on PRs | [Evals](./evaluation/) |
+| **Agent Orchestrator** | Enforces routing constraints (SOLID, SDLC) via `.agents/skills` framework | [AGENTS.md](./AGENTS.md) |
+| **Enterprise Config** | Pydantic Settings with dynamic environments (dev, test, prod) | [Config](./centrag/config.py) |
+| **CI/CD Built-In** | GitHub Actions configured for Auto-Graph builds, Bandit Scans, and RAG Evals | [.github/workflows/](.github/workflows/) |
+| **Enterprise Edge** | Strict CORS, Rate Limiting, Circuit Breakers, and Tenant Isolations | [Middleware](./centrag/middleware/) |
 | **Dual-Path Retrieval** | PageIndex (vectorless) + Qdrant (vector) + RRF hybrid | [CODE_FLOW.md](docs/CODE_FLOW.md#the-dual-path-architecture) |
 | **14 PII Patterns** | SSN, email, credit card, passport, IBAN, DOB, driver's license, MRN, AWS keys | [CODE_FLOW.md](docs/CODE_FLOW.md#pii-scrubbing-detail) |
 | **LLM Gateway** | Circuit breaker, per-team cost budgets, P50/P95/P99 latency | [CODE_FLOW.md](docs/CODE_FLOW.md#llm-gateway-resilience-layer) |

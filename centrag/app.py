@@ -31,6 +31,7 @@ from centrag.config import get_settings, Settings
 from centrag.wiring import build_retrieval_engine, build_ingestion_service
 from centrag.storage.document_store import DocumentStore
 from centrag.ingestion.worker import IngestionWorker, WorkerConfig
+from centrag.middleware.rate_limiter import SimpleRateLimitMiddleware
 
 logger = structlog.get_logger()
 
@@ -175,11 +176,22 @@ def create_app() -> FastAPI:
     )
 
     # --- Middleware Stack (Chain of Responsibility) ---
+    # Top middleware executes FIRST on request
+    
+    # 1. CORS: Strict origins in production
+    cors_origins = getattr(settings, "cors_origins", ["https://app.centrag.io"]) if settings.is_production else ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if not settings.is_production else [],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=cors_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "x-team-id"],
+    )
+    
+    # 2. Rate Limiting (Defense in depth against DDoS)
+    app.add_middleware(
+        SimpleRateLimitMiddleware,
+        max_requests=100 if settings.is_production else 1000,
+        window_seconds=60
     )
 
     # --- Routes ---

@@ -41,6 +41,14 @@ format:
 	ruff format centrag/ tests/
 	ruff check --fix centrag/ tests/
 
+security:
+	bandit -r centrag/ -ll -ii
+	safety check
+
+# --- SDLC Operations ---
+build-graph:
+	python -m code_review_graph build --repo .
+
 # --- Quality ---
 eval:
 	python -m tests.eval_ragas

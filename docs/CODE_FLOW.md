@@ -16,6 +16,7 @@
 6. [Component Reference](#component-reference)
 7. [File Map](#file-map)
 8. [Glossary](#glossary)
+9. [Agent Ecosystem Mapping](#agent-ecosystem-mapping)
 
 ---
 
@@ -109,6 +110,8 @@ lifespan(app: FastAPI)
 
 ### The Composition Root
 
+> **🤖 Agent Skill Mapping**: When modifying the composition root or dependency graphs, agents MUST load `.agents/skills/agent-orchestrator`, then delegate to `senior-architect` and `architecture-patterns`. Ensure you maintain SOLID boundaries.
+
 **File:** [`centrag/wiring.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/wiring.py)
 
 This is the **ONE place** where concrete implementations are chosen. Two builder functions:
@@ -198,6 +201,8 @@ POST /v1/documents
 
 ### Step 2: Background Worker
 
+> **🤖 Agent Skill Mapping**: Before altering the background job loops, load `async-python-patterns` and `microservices-patterns` to prevent zombie threads and ensure retry safety.
+
 **File:** [`centrag/ingestion/worker.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/ingestion/worker.py)
 **Class:** `IngestionWorker` (line 87)
 
@@ -226,6 +231,8 @@ _consume_loop() → _process_job(job)
 ```
 
 ### Step 3: Ingestion Service
+
+> **🤖 Agent Skill Mapping**: For edits here across parsing, cleaning, and indexing, invoke `senior-data-engineer`. Consult `python-performance-optimization` to prevent pipeline latency bloat.
 
 **File:** [`centrag/ingestion/service.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/ingestion/service.py)
 **Class:** `IngestionService` (line 110)
@@ -305,6 +312,8 @@ Body: { "query": "...", "target_doc_id": "...", "mode": "auto" }
 ```
 
 ### Step 2: RetrievalEngine.retrieve()
+
+> **🤖 Agent Skill Mapping**: When modifying adaptive routing or LLM complex generation logic, agents MUST first load `senior-ml-engineer` and validate new test cases via `test-driven-development`.
 
 **File:** [`centrag/retrieval/engine.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/retrieval/engine.py)
 **Class:** `RetrievalEngine` (line ~200)
@@ -488,6 +497,8 @@ fuse(pageindex_results, vector_results) → merged_results
 
 ### Guardrails
 
+> **🤖 Agent Skill Mapping**: Making changes to the redaction logic or budgets? Delegate strictly to `senior-security`, `audit`, and evaluate edge cases with `harden`. Safety rules must fail securely!
+
 **File:** [`centrag/guardrails/engine.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/guardrails/engine.py) — `GuardrailEngine`
 **Config:** `GuardrailsConfig` (line 50)
 
@@ -573,6 +584,8 @@ Retrieval flow:
 | Latency Monitor | Rolling window, P50/P95/P99 percentiles |
 
 ### Evaluation Harness
+
+> **🤖 Agent Skill Mapping**: Designing regressions or testing the PathComparator? Load `senior-qa` and `webapp-testing`. Always run against golden datasets.
 
 **Directory:** [`centrag/evaluation/`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation)
 
@@ -709,3 +722,15 @@ docs/                               34 documentation files
 | **ChunkResult** | Immutable chunk with 14 provenance fields | `abstractions/chunker.py` |
 | **DocumentStore** | Filesystem store: `data/{team_id}/{doc_id}/` | `storage/document_store.py` |
 | **GuardrailViolation** | Exception raised by rails → 422 HTTP response | `abstractions/guardrail.py` |
+
+---
+
+## 9. Agent Ecosystem Mapping
+
+When an LLM coding agent works in evaluating or rewriting the CentRAG pipeline, it utilizes the local `.agents/skills` repository. The overarching orchestrator sits in `agent-orchestrator`, providing 38 specific behavior models.
+
+**How to Execute Changes:**
+1. Whenever modifying an active part of the platform, the LLM agent first identifies the domain.
+2. The agent reads the Orchestrator logic in `.agents/skills/agent-orchestrator/SKILL.md`.
+3. The LLM then references the mapped skill before updating the `.py` files. Example: `senior-security` + `harden` for guardrail updates.
+4. Finally, it uses `verification-before-completion`, rebuilding the **code-review-graph** to validate that new logic doesn't break dependent branches.

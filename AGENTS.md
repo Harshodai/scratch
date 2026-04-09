@@ -40,6 +40,7 @@ This file serves as context for AI coding agents (Copilot, Cursor, Antigravity, 
 
 ```
 centrag/                    # Core RAG platform
+├── .github/                # Enterprise CI/CD pipelines (Tests, Linters, Security, Evals)
 ├── abstractions/           # Protocol definitions (contracts)
 │   ├── cache.py            # CacheTier enum, CacheResult, CacheProtocol
 │   ├── chunker.py          # ChunkerProtocol for text segmentation
@@ -92,7 +93,8 @@ centrag/                    # Core RAG platform
 │
 ├── middleware/             # FastAPI middleware
 │   ├── auth.py             # API key authentication + team resolution
-│   └── slow_logger.py      # Slow request logging
+│   ├── slow_logger.py      # Slow request logging
+│   └── rate_limiter.py     # Enterprise DDOS protection and tenant throttling
 │
 ├── mcp_bridge/             # Model Context Protocol integration
 │   ├── rag_as_mcp_tool.py  # Expose CentRAG as an MCP tool
@@ -142,6 +144,7 @@ alembic/                    # Database migrations
 mcp_enterprise_server/      # Standalone MCP server for enterprise tools
 tests/                      # Unit tests (pytest + pytest-asyncio)
 docs/                       # Architecture docs, audits, walkthroughs
+└── adr/                    # Architecture Decision Records (ADRs)
 ```
 
 ---
@@ -185,6 +188,11 @@ All NoOp implementations are **deterministic** — same input always produces th
 ---
 
 ## Agent-Specific Notes
+
+### Master Orchestrator Framework
+- This repository utilizes an **Agent Orchestrator** framework. When handling complex or multi-step requests, you MUST use the `agent-orchestrator` skill (`.agents/skills/agent-orchestrator/SKILL.md`).
+- The Orchestrator safely routes your workloads across a fleet of 38 specialized local skills covering domains like planning, "Senior" specialized execution, architecture design, QA looping, and robust debugging.
+- ALWAYS decompose large, ambiguous tasks using this orchestrator routing strategy before initiating code changes.
 
 ### For Copilot / Cursor
 - Always check `centrag/abstractions/` before implementing anything
