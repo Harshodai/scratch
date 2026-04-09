@@ -29,16 +29,23 @@ from centrag.abstractions.memory import MemoryProtocol
 from centrag.abstractions.extractor import ExtractorProtocol
 from centrag.abstractions.chunker import ChunkerProtocol
 from centrag.abstractions.guardrail import InputRailProtocol, OutputRailProtocol
+from centrag.abstractions.tree_index import TreeIndexProtocol  # VECTORLESS path
 
 __all__ = [
-    "EmbedderProtocol",
-    "VectorStoreProtocol",
+    # --- SHARED (used by both paths or engine orchestration) ---
     "LLMProtocol",
     "CacheProtocol",
-    "RerankerProtocol",
     "MemoryProtocol",
     "ExtractorProtocol",
     "ChunkerProtocol",
     "InputRailProtocol",
     "OutputRailProtocol",
+
+    # --- VECTOR path ---
+    "EmbedderProtocol",
+    "VectorStoreProtocol",
+    "RerankerProtocol",
+
+    # --- VECTORLESS path ---
+    "TreeIndexProtocol",
 ]

@@ -56,9 +56,15 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_grpc_port: int = 6334
-    qdrant_collection: str = "documents"
+    qdrant_collection: str = "centrag"
     qdrant_cache_collection: str = "cache_responses"
     qdrant_memory_collection: str = "memories"
+    qdrant_api_key: str = ""                   # Qdrant Cloud API key
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def qdrant_url(self) -> str:
+        return f"http://{self.qdrant_host}:{self.qdrant_port}"
 
     # --- AWS ---
     aws_region: str = "us-east-1"
@@ -75,6 +81,12 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
 
+    # --- VECTORLESS path: PageIndex (tree-based reasoning retrieval) ---
+    pageindex_model: str = "gpt-4o"           # LLM for tree building + navigation
+    pageindex_add_summaries: bool = True       # Include node summaries in tree
+    pageindex_add_node_text: bool = True       # Include full text in tree nodes
+    data_dir: str = "data/documents"           # Filesystem storage for DocumentStore
+
     # --- Security ---
     api_key_hash_pepper: str = "change-this-in-production"
     rate_limit_default: int = 60  # requests per minute per team
@@ -82,6 +94,8 @@ class Settings(BaseSettings):
     # --- Feature Flags ---
     enable_docs_routes: bool = True
     enable_retrieval_routes: bool = True
+    enable_pageindex: bool = True              # VECTORLESS path enabled
+    enable_vector: bool = False                # VECTOR path (requires Qdrant)
 
     @property
     def is_production(self) -> bool:

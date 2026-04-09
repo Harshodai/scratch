@@ -28,7 +28,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from centrag.config import get_settings, Settings
-from centrag.wiring import build_retrieval_engine
+from centrag.wiring import build_retrieval_engine, build_ingestion_service
+from centrag.storage.document_store import DocumentStore
+from centrag.ingestion.worker import IngestionWorker, WorkerConfig
 
 logger = structlog.get_logger()
 
@@ -102,18 +104,49 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         return_exceptions=True,  # Don't fail if infra is down in dev
     )
 
-    # --- Build the RetrievalEngine and attach to app.state ---
+    # --- Shared: DocumentStore (used by BOTH paths) ---
+    document_store = DocumentStore(base_path=settings.data_dir)
+    app.state.document_store = document_store
+
+    # --- Build the RetrievalEngine (dual-path: vector + vectorless) ---
     redis_client = getattr(app.state, "redis", None)
     app.state.retrieval_engine = build_retrieval_engine(
         settings=settings,
         redis_client=redis_client,
+        document_store=document_store,
     )
 
-    logger.info("centrag_ready", host=settings.api_host, port=settings.api_port)
+    # --- Build IngestionService (feeds both paths) ---
+    app.state.ingestion_service = build_ingestion_service(
+        settings=settings,
+        document_store=document_store,
+    )
+
+    # --- Start IngestionWorker (async background processor) ---
+    worker = IngestionWorker(
+        ingestion_service=app.state.ingestion_service,
+        document_store=document_store,
+        config=WorkerConfig(),
+    )
+    await worker.start()
+    app.state.ingestion_worker = worker
+
+    logger.info(
+        "centrag_ready",
+        host=settings.api_host,
+        port=settings.api_port,
+        pageindex_enabled=settings.enable_pageindex,
+        data_dir=settings.data_dir,
+        async_worker="running",
+    )
 
     yield  # App runs here
 
     # --- Shutdown ---
+    # Stop worker first (gracefully finish current job)
+    if getattr(app.state, "ingestion_worker", None):
+        await app.state.ingestion_worker.shutdown()
+        logger.info("ingestion_worker_stopped")
     if getattr(app.state, "db_engine", None):
         await app.state.db_engine.dispose()
         logger.info("postgres_closed")

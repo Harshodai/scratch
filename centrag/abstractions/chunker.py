@@ -54,22 +54,63 @@ class ChunkingConfig:
 @dataclass(frozen=True)
 class ChunkResult:
     """
-    Immutable chunk with metadata for downstream embedding + retrieval.
+    Immutable chunk with FULL PROVENANCE for downstream embedding + retrieval.
 
-    Each chunk carries enough context for the embedder and retrieval engine
-    to understand where it came from and what surrounds it.
+    Each chunk carries complete citation metadata. Without this,
+    retrieval citations are unreliable and Knowledge Graph anchors
+    have no reference points.
+
+    Required by spec:
+        {chunk_id, doc_id, source_type, section_title, page_number,
+         char_offset, token_count, s3_url}
     """
+    # Core content
     content: str                                      # The chunk text
     chunk_index: int                                  # Position in document
     start_char: int                                   # Character offset in source
     end_char: int                                     # Character offset in source
     token_count: int                                  # Estimated token count
+
+    # Provenance fields (required for reliable citations)
+    doc_id: str = ""                                  # Parent document UUID
+    source_type: str = ""                             # "pdf", "csv", "markdown", etc.
+    section_title: str = ""                           # Heading this chunk lives under
+    page_number: int | None = None                    # PDF page number (None for non-PDF)
+    s3_url: str = ""                                  # Source URL if from cloud storage
+
+    # Parent-child indexing (Phase 4)
+    parent_chunk_id: str | None = None                # For child chunks → parent reference
+    chunk_id: str = ""                                # Unique chunk identifier
+
+    # Extensible metadata
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def char_offset(self) -> int:
+        """Alias for start_char — matches spec field name."""
+        return self.start_char
 
     @property
     def boundary(self) -> tuple[int, int]:
         """Character boundary for late chunking integration with EmbedderProtocol."""
         return (self.start_char, self.end_char)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON storage / cache."""
+        return {
+            "chunk_id": self.chunk_id,
+            "chunk_index": self.chunk_index,
+            "doc_id": self.doc_id,
+            "source_type": self.source_type,
+            "section_title": self.section_title,
+            "page_number": self.page_number,
+            "char_offset": self.start_char,
+            "token_count": self.token_count,
+            "s3_url": self.s3_url,
+            "parent_chunk_id": self.parent_chunk_id,
+            "content_preview": self.content[:100],
+            **self.metadata,
+        }
 
 
 @runtime_checkable

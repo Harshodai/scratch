@@ -90,15 +90,15 @@ class TestInputLengthRail:
 class TestPII:
     def test_detect_ssn(self):
         findings = detect_pii("My SSN is 123-45-6789")
-        assert any(f["type"] == "ssn" for f in findings)
+        assert "ssn" in findings
 
     def test_detect_email(self):
         findings = detect_pii("Contact john@example.com")
-        assert any(f["type"] == "email" for f in findings)
+        assert "email" in findings
 
     def test_detect_credit_card(self):
         findings = detect_pii("Card: 4111-1111-1111-1111")
-        assert any(f["type"] == "credit_card" for f in findings)
+        assert "credit_card" in findings
 
     def test_redact_pii(self):
         result = redact_pii("My SSN is 123-45-6789 and email is test@test.com")

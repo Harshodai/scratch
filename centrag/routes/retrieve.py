@@ -28,8 +28,25 @@ class RetrieveRequestBody(BaseModel):
     max_results: int = Field(5, ge=1, le=20)
     include_memory: bool = True
     include_sources: bool = True
-    mode: str = Field("rag", pattern="^(rag|full_context)$")
     temperature: float = Field(0.1, ge=0.0, le=1.0)
+
+    # Dual-path routing
+    target_doc_id: str = Field(
+        "",
+        description="Scope query to a specific document (enables VECTORLESS/PageIndex path)",
+    )
+    mode: str = Field(
+        "auto",
+        pattern="^(auto|pageindex|vector|hybrid|rag)$",
+        description=(
+            "Retrieval mode: "
+            "auto (router decides), "
+            "pageindex (VECTORLESS only), "
+            "vector (VECTOR only), "
+            "hybrid (both + RRF fusion), "
+            "rag (legacy vector search)"
+        ),
+    )
 
 
 class SourceResponse(BaseModel):
@@ -37,6 +54,9 @@ class SourceResponse(BaseModel):
     document_id: str
     chunk_index: int
     relevance_score: float
+    source_type: str = ""               # "pageindex" | "vector"
+    page_refs: str = ""                 # VECTORLESS: page ranges
+    reasoning: str = ""                 # VECTORLESS: LLM navigation reasoning
 
 
 class RetrieveResponse(BaseModel):
@@ -45,6 +65,7 @@ class RetrieveResponse(BaseModel):
     query_complexity: str
     cache_tier: str
     memory_used: bool
+    retrieval_source: str = ""          # "pageindex" | "vector" | "hybrid"
 
 
 def _get_engine(request: Request) -> RetrievalEngine:
@@ -72,6 +93,7 @@ async def retrieve(
         include_memory=body.include_memory,
         include_sources=body.include_sources,
         mode=body.mode,
+        target_doc_id=body.target_doc_id,
     )
 
     response = await engine.retrieve(request, ctx)
@@ -84,10 +106,14 @@ async def retrieve(
                 document_id=s.document_id,
                 chunk_index=s.chunk_index,
                 relevance_score=round(s.relevance_score, 4),
+                source_type=s.metadata.get("source", ""),
+                page_refs=s.metadata.get("page_refs", ""),
+                reasoning=s.metadata.get("reasoning", ""),
             )
             for s in response.sources
         ],
         query_complexity=response.query_complexity.value,
         cache_tier=response.cache_tier.value,
         memory_used=len(response.memory_context) > 0,
+        retrieval_source=response.metadata.get("retrieval_source", ""),
     )

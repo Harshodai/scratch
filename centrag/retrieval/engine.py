@@ -65,14 +65,24 @@ logger = structlog.get_logger()
 
 @dataclass(frozen=True)
 class RetrievalRequest:
-    """Immutable retrieval request."""
+    """
+    Immutable retrieval request.
+
+    Supports dual-path retrieval:
+        mode="auto"      → QueryRouter decides (Day 3)
+        mode="pageindex"  → VECTORLESS path only
+        mode="vector"     → VECTOR path only
+        mode="hybrid"     → Both paths + RRF fusion (Day 3)
+        mode="rag"        → Legacy: vector search (backward compat)
+    """
 
     query: str
     namespace: str = "default"
     max_results: int = 5
     include_memory: bool = True
     include_sources: bool = True
-    mode: str = "rag"  # "rag" | "full_context" (NotebookLM-style for small docs)
+    mode: str = "rag"  # "auto" | "pageindex" | "vector" | "hybrid" | "rag"
+    target_doc_id: str = ""  # Scope to a specific document (enables PageIndex)
 
 
 @dataclass(frozen=True)
@@ -191,6 +201,12 @@ class RetrievalEngine:
         memory: MemoryProtocol | None = None,
         input_rails: list[InputRailProtocol] | None = None,
         output_rails: list[OutputRailProtocol] | None = None,
+        # --- VECTORLESS path (PageIndex) ---
+        pageindex_retriever: Any | None = None,
+        document_store: Any | None = None,
+        # --- SHARED: Dual-path routing (Day 3) ---
+        query_router: Any | None = None,
+        hybrid_retriever: Any | None = None,
     ) -> None:
         # Pattern 3: Pervasive Lazy Loading
         # SDKs (boto3, transformers) only initialize when their property is first accessed.
@@ -202,6 +218,14 @@ class RetrievalEngine:
         self._memory = memory
         self._input_rails = input_rails or []
         self._output_rails = output_rails or []
+
+        # VECTORLESS path components
+        self._pageindex_retriever = pageindex_retriever
+        self._document_store = document_store
+
+        # SHARED: Dual-path routing
+        self._query_router = query_router
+        self._hybrid_retriever = hybrid_retriever
 
         self.__embedder = None
         self.__vectorstore = None
@@ -293,53 +317,105 @@ class RetrievalEngine:
                 )
                 return cached_response
 
-            # --- Step 3: Dense vector search ---
-            query_embedding = await self._embedder.embed_query(sanitized_query)
-            # Tracking embed tokens (approximation)
-            embed_token_estimate = len(sanitized_query.split()) * 2
-            search_filter = VectorFilter.for_team(ctx.team_id).with_condition(
-                "namespace", request.namespace
+            # --- Step 3: Retrieval (DUAL-PATH) ---
+            # Route to VECTORLESS or VECTOR path based on request.mode
+            use_pageindex = (
+                self._pageindex_retriever is not None
+                and request.target_doc_id
+                and request.mode in ("pageindex", "auto", "hybrid")
             )
-            raw_results = await self._vectorstore.search(
-                collection="documents",
-                vector=query_embedding,
-                filter=search_filter,
-                limit=request.max_results * 3,  # Over-fetch for reranker
-            )
-            log.info("vector_search_complete", result_count=len(raw_results))
 
-            if not raw_results:
+            raw_results = []
+            sources: list[SourceChunk] = []
+            retrieval_source = "vector"  # default
+            embed_token_estimate = 0
+
+            if use_pageindex:
+                # ── VECTORLESS PATH (PageIndex) ─────────────────────
+                log.info("using_pageindex_retrieval", doc_id=request.target_doc_id)
+                retrieval_source = "pageindex"
+
+                pi_results = await self._pageindex_retriever.retrieve(
+                    query=sanitized_query,
+                    doc_id=request.target_doc_id,
+                    team_id=ctx.team_id,
+                    limit=request.max_results,
+                )
+
+                if pi_results:
+                    sources = [
+                        SourceChunk(
+                            content=r.content,
+                            document_id=r.doc_id,
+                            chunk_index=0,
+                            relevance_score=r.relevance_score,
+                            metadata={
+                                "source": "pageindex",
+                                "page_refs": r.page_refs,
+                                "reasoning": r.reasoning,
+                                **r.metadata,
+                            },
+                        )
+                        for r in pi_results
+                    ]
+                    log.info(
+                        "pageindex_retrieval_complete",
+                        result_count=len(sources),
+                        page_refs=pi_results[0].page_refs if pi_results else "",
+                    )
+
+            if not sources:
+                # ── VECTOR PATH (embed → search → rerank) ──────────
+                if retrieval_source == "pageindex":
+                    log.info("pageindex_empty_fallback_to_vector")
+                retrieval_source = "vector" if not use_pageindex else retrieval_source
+
+                query_embedding = await self._embedder.embed_query(sanitized_query)
+                embed_token_estimate = len(sanitized_query.split()) * 2
+                search_filter = VectorFilter.for_team(ctx.team_id).with_condition(
+                    "namespace", request.namespace
+                )
+                raw_results = await self._vectorstore.search(
+                    collection="documents",
+                    vector=query_embedding,
+                    filter=search_filter,
+                    limit=request.max_results * 3,
+                )
+                log.info("vector_search_complete", result_count=len(raw_results))
+
+            if not raw_results and not sources:
                 return RetrievalResponse(
                     answer="No relevant documents found for your query.",
                     sources=[],
                     cache_tier=CacheTier.MISS,
                     query_complexity=complexity,
+                    metadata={"retrieval_source": retrieval_source},
                 )
 
-            # --- Step 4: Rerank ---
-            reranked = await self._reranker.rerank(
-                query=request.query,
-                documents=[r.payload.get("content", "") for r in raw_results],
-                top_n=request.max_results,
-            )
-
-            # --- Step 5: CRAG — Corrective validation (Pattern 9: The Advisor Loop) ---
-            confident_chunks = [r for r in reranked if r.is_confident]
-            if not confident_chunks:
-                log.warning("crag_low_confidence", message="Advisor intercepting bad context.")
-                # The Advisor (Critic node) logic:
-                # In full implementation, we spawn `await self._llm.advise(...)` to rewrite the query.
-                confident_chunks = reranked[:3]
-
-            sources = [
-                SourceChunk(
-                    content=chunk.text,
-                    document_id=raw_results[chunk.index].payload.get("document_id", ""),
-                    chunk_index=raw_results[chunk.index].payload.get("chunk_index", 0),
-                    relevance_score=chunk.relevance_score,
+            # --- Step 4: Rerank (VECTOR path only) ---
+            if raw_results and not sources:
+                reranked = await self._reranker.rerank(
+                    query=request.query,
+                    documents=[r.payload.get("content", "") for r in raw_results],
+                    top_n=request.max_results,
                 )
-                for chunk in confident_chunks
-            ]
+
+                # --- Step 5: CRAG — Corrective validation ---
+                confident_chunks = [r for r in reranked if r.is_confident]
+                if not confident_chunks:
+                    log.warning("crag_low_confidence", message="Advisor intercepting bad context.")
+                    confident_chunks = reranked[:3]
+
+                sources = [
+                    SourceChunk(
+                        content=chunk.text,
+                        document_id=raw_results[chunk.index].payload.get("document_id", ""),
+                        chunk_index=raw_results[chunk.index].payload.get("chunk_index", 0),
+                        relevance_score=chunk.relevance_score,
+                        metadata={"source": "vector"},
+                    )
+                    for chunk in confident_chunks
+                ]
 
             # --- Step 6: Memory context ---
             memory_context: list[str] = []
@@ -387,6 +463,7 @@ class RetrievalEngine:
                 query_complexity=complexity,
                 llm_response=llm_response,
                 memory_context=memory_context,
+                metadata={"retrieval_source": retrieval_source},
             )
 
             # --- Step 10: Cache write (serialize for JSON-safe L2 storage) ---

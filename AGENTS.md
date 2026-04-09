@@ -27,10 +27,12 @@ This file serves as context for AI coding agents (Copilot, Cursor, Antigravity, 
 | Strategy | `centrag/abstractions/*.py` | Swap implementations without changing callers |
 | Composition Root | `centrag/wiring.py` | Single place to configure all dependencies |
 | Repository | `centrag/models.py` | Entities define shape; repositories define access |
-| Decorator | `centrag/observability/` | Wrap any operation with tracing/metrics |
+| Decorator | `centrag/implementations/llm_gateway.py` | Wrap LLM with circuit breaker, cost tracking, latency |
 | Tiered Cache | `centrag/cache/` | L1 (in-process) → L2 (Redis) fallthrough |
 | Advisor Loop | `centrag/retrieval/engine.py` | CRAG pattern — corrective validation of context |
 | Temporal Versioning | `centrag/memory/` | Facts are never overwritten, only superseded |
+| Circuit Breaker | `centrag/implementations/llm_gateway.py` | Prevent cascading failures when LLM provider is down |
+| Parent-Child | `centrag/extraction/chunkers/parent_child.py` | Small chunks for search, parent chunks for LLM context |
 
 ---
 
@@ -54,6 +56,9 @@ centrag/                    # Core RAG platform
 │   ├── noop_vectorstore.py # In-memory vector store (dev/test)
 │   ├── noop_llm.py         # Template-based LLM (dev/test)
 │   ├── noop_reranker.py    # Keyword-overlap reranker (dev/test)
+│   ├── qdrant_vectorstore.py # Production Qdrant client (lazy-loading)
+│   ├── pageindex_tree.py   # VectifyAI PageIndex tree builder
+│   ├── llm_gateway.py      # LLM proxy: circuit breaker + cost + latency
 │   ├── bedrock_embedder.py # AWS Bedrock Titan V2 embeddings (production)
 │   └── openai_embedder.py  # OpenAI text-embedding-3 (production)
 │
@@ -66,18 +71,20 @@ centrag/                    # Core RAG platform
 ├── extraction/             # Document ingestion pipeline
 │   ├── pipeline.py         # Orchestrates parse → chunk → embed → store
 │   ├── parsers/            # Document format parsers
-│   │   ├── base.py         # Base parser with common utilities
+│   │   ├── base.py         # ParserRegistry (strategy pattern)
 │   │   ├── pdf.py          # PDF extraction (PyMuPDF)
-│   │   └── text.py         # Plain text / markdown parser
+│   │   ├── text.py         # Plain text / markdown / HTML parser
+│   │   └── csv_parser.py   # CSV/TSV with pandas-style streaming
 │   └── chunkers/           # Text chunking strategies
 │       ├── fixed.py        # Fixed-size token chunks
 │       ├── recursive.py    # Recursive character text splitter
 │       ├── semantic.py     # Embedding-based semantic chunking
-│       └── structure_aware.py  # Heading/section-aware chunking
+│       ├── structure_aware.py  # Heading/section-aware chunking
+│       └── parent_child.py # Parent (512t) + child (128t) indexing
 │
 ├── guardrails/             # Input/output safety rails
 │   ├── engine.py           # GuardrailEngine with composable rails
-│   ├── pii.py              # PII detection and redaction (regex-based)
+│   ├── pii.py              # PII detection + redaction (14 patterns)
 │   └── cost_tracker.py     # LLM cost tracking and budget gating
 │
 ├── memory/                 # Cross-session memory (Zep/Graphiti-inspired)
@@ -97,7 +104,25 @@ centrag/                    # Core RAG platform
 │   └── otel_provider.py    # OpenTelemetry + Prometheus + Grafana (production, free)
 │
 ├── retrieval/              # Core RAG pipeline
-│   └── engine.py           # RetrievalEngine: embed → search → rerank → CRAG → generate
+│   ├── engine.py           # RetrievalEngine: embed → search → rerank → CRAG → generate
+│   ├── pageindex_retriever.py # VECTORLESS: LLM navigates tree index
+│   ├── query_router.py     # Auto: pageindex vs vector vs hybrid
+│   ├── hybrid.py           # Reciprocal Rank Fusion (k=60)
+│   └── session.py          # Multi-turn conversation history
+│
+├── evaluation/             # Quality measurement
+│   ├── dataset.py          # Golden test cases (TestCase + GoldenDataset)
+│   ├── judges.py           # Faithfulness / Relevance / Coverage judges
+│   ├── metrics.py          # Aggregate scoring + EvaluationReport
+│   └── comparator.py       # Side-by-side path comparison
+│
+├── ingestion/              # Document upload pipeline
+│   ├── service.py          # IngestionService (parse → clean → index)
+│   ├── cleaner.py          # 5-stage PII scrubbing pipeline
+│   └── worker.py           # Async background processor with retry
+│
+├── storage/                # Filesystem storage
+│   └── document_store.py   # Unified doc store (both paths)
 │
 ├── routes/                 # FastAPI route handlers
 │   ├── documents.py        # Document upload/management endpoints
@@ -175,3 +200,94 @@ All NoOp implementations are **deterministic** — same input always produces th
 - Verify new implementations satisfy their Protocol (runtime_checkable)
 - Check for proper team isolation in any data access path
 - Ensure frozen dataclasses have `to_dict()`/`from_dict()` if cached
+
+---
+
+## ⚠️ MANDATORY: Post-Change Maintenance Checklist
+
+**Every AI agent working on this repo MUST perform the following steps after ANY code change.** This is not optional. The user should never need to ask for documentation updates — agents must take this responsibility automatically.
+
+### 1. Rebuild code-review-graph
+
+After adding, deleting, or renaming any file, class, or function:
+
+```bash
+python -m code_review_graph build --repo .
+```
+
+This updates `.code-review-graph/graph.db` (715+ nodes, 3529+ edges). Without this, blast-radius analysis and dependency queries will be stale.
+
+**When to rebuild:**
+- Added or deleted a `.py` file
+- Renamed a class or function
+- Changed import structure
+- Added new Protocol implementations
+- Refactored any module
+
+### 2. Update `docs/CODE_FLOW.md`
+
+After any change to the code flow, architecture, or component structure:
+
+- **New class/file?** → Add it to the [File Map](docs/CODE_FLOW.md#file-map) with class name, file path, and purpose
+- **New protocol implementation?** → Add to the [Protocols table](docs/CODE_FLOW.md#protocols-contracts) 
+- **Changed ingestion pipeline?** → Update [Uploading a Document](docs/CODE_FLOW.md#uploading-a-document-ingestion) step-by-step trace
+- **Changed retrieval pipeline?** → Update [Asking a Question](docs/CODE_FLOW.md#asking-a-question-retrieval) step-by-step trace
+- **New guardrail?** → Add to [Guardrails table](docs/CODE_FLOW.md#guardrails)
+- **New PII pattern?** → Add to [PII Patterns table](docs/CODE_FLOW.md#pii-patterns-14-total)
+- **New chunker?** → Add to [ChunkResult Schema](docs/CODE_FLOW.md#chunkresult-schema) and File Map
+
+**CODE_FLOW.md must always reflect actual class names, method signatures, file paths, and line numbers from the source code.**
+
+### 3. Update `AGENTS.md` (this file)
+
+After any structural change:
+
+- **New file in the tree?** → Update the [Project Structure](AGENTS.md#project-structure) tree
+- **New design pattern?** → Add to [Design Patterns Used](AGENTS.md#design-patterns-used) table
+- **New implementation convention?** → Add to [Key Conventions](AGENTS.md#key-conventions)
+- **New environment variable?** → Add to [Configuration](AGENTS.md#configuration)
+
+### 4. Update `README.md`
+
+After any user-facing change:
+
+- **New feature?** → Add to [Key Features](README.md#key-features) table with doc link
+- **New doc file?** → Add to [Documentation Index](README.md#-complete-documentation-index) tables
+- **New env var?** → Add to [Environment Variables](README.md#environment-variables)
+- **Test count changed?** → Update test count badge and text
+- **New dependency?** → Add to [Install Dependencies](README.md#install-dependencies) section
+
+### 5. Update relevant `docs/` files
+
+If your change affects a specific doc topic:
+
+| Change type | Docs to update |
+|-------------|---------------|
+| New Protocol or abstraction | `ARCHITECTURE_LLD.md` |
+| System topology change | `ARCHITECTURE_HLD.md` |
+| New design pattern | `DESIGN_PATTERNS_AND_LEARNING.md` |
+| Security-related change | `AUDIT_REPORT.md` |
+| New MCP tool | `MCP_IMPLEMENTATION_GUIDE.md` |
+| Deployment change | `MCP_DEPLOYMENT_GUIDE.md` |
+| New PII pattern or guardrail | `CODE_FLOW.md` (PII section) |
+
+### 6. Run tests
+
+```bash
+pytest tests/ -v
+```
+
+Every change must maintain the current pass rate (202+ tests). If you add a new component, add corresponding tests.
+
+### Quick Reference: The 6-Step Post-Change Ritual
+
+```
+1. ✅ Code change complete
+2. 🔄 python -m code_review_graph build --repo .
+3. 📄 Update docs/CODE_FLOW.md (class names, file paths, flow diagrams)
+4. 📄 Update AGENTS.md (project structure tree, patterns table)
+5. 📄 Update README.md (features table, doc index, test count)
+6. 🧪 pytest tests/ -v (must pass)
+```
+
+**If you skip any step, the next agent working on this repo will have stale context and may introduce bugs.**

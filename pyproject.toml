@@ -30,8 +30,13 @@ dependencies = [
     "aioboto3>=13.0.0",             # Async boto3
 
     # --- AI / Embeddings ---
-    "cohere>=5.11.0",               # Re-ranking
-    "tiktoken>=0.8.0",              # Token counting
+    "cohere>=5.11.0",               # Re-ranking (VECTOR path)
+    "tiktoken>=0.8.0",              # Token counting (shared)
+
+    # --- VECTORLESS path: PageIndex ---
+    "litellm>=1.50.0",              # LLM gateway for tree building
+    "pymupdf>=1.24.0",              # PDF processing for PageIndex
+    "PyPDF2>=3.0.0",                # PDF page extraction
 
     # --- Document Processing ---
     "unstructured[all-docs]>=0.16.0",
