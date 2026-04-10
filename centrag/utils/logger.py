@@ -15,9 +15,28 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-def get_logger(name: str | None = None) -> structlog.BoundLogger:
+from typing import Any
+
+class CentragLogger:
+    """Explicitly typed adapter to serialize and forward context to structlog."""
+    def __init__(self, logger: structlog.BoundLogger):
+        self._logger = logger
+
+    def info(self, event: str, **kwargs: Any) -> None:
+        self._logger.info(event, **kwargs)
+
+    def warning(self, event: str, **kwargs: Any) -> None:
+        self._logger.warning(event, **kwargs)
+
+    def error(self, event: str, **kwargs: Any) -> None:
+        self._logger.error(event, **kwargs)
+
+    def debug(self, event: str, **kwargs: Any) -> None:
+        self._logger.debug(event, **kwargs)
+
+def get_logger(name: str | None = None) -> CentragLogger:
     """
     Centralized logger factory.
     All components must use this to inherit standard observability contexts.
     """
-    return structlog.get_logger(name)
+    return CentragLogger(structlog.get_logger(name))

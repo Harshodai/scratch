@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     enable_retrieval_routes: bool = True
     enable_pageindex: bool = True              # VECTORLESS path enabled
     enable_vector: bool = False                # VECTOR path (requires Qdrant)
+    query_transformer_strategy: str = "llm_extractor"  # "llm_extractor" or "hyde"
 
     @property
     def is_production(self) -> bool:

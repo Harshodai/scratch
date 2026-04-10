@@ -365,20 +365,20 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │   └── RoutingDecision.path → RetrievalPath enum         # line 30
 │       VECTOR | PAGEINDEX | HYBRID
 │
-├── STEP 4.5: QUERY TRANSFORMATION
+├── STEP 4.5: QUERY TRANSFORMATION (QueryTransformerProtocol)
 │   llm_query_extractor.transform(query)                 # centrag/implementations/llm_query_extractor.py
-│   └── Outputs optimized intent and VectorFilters
+│   └── Outputs QueryIntent(optimized_query, expansions, extracted_filter)
 │
 ├── STEP 5: RETRIEVAL (Path-Dependent)
 │   │
 │   ├── If PAGEINDEX:
-│   │   PageIndexRetriever.retrieve(optimized_query, doc_id) # centrag/retrieval/pageindex_retriever.py
+│   │   PageIndexRetriever.retrieve(query, doc_id, team_id) # centrag/retrieval/pageindex_retriever.py
 │   │   └── LLM navigates the tree index to find pages
 │   │   └── Returns list of relevant page contents
 │   │
 │   ├── If VECTOR:
 │   │   embedder.embed_query(query) → vector              # EmbedderProtocol
-│   │   vectorstore.search(vector, filter, top_k)         # VectorStoreProtocol
+│   │   vectorstore.search(vector, filter, top_k, sparse_vectors) # VectorStoreProtocol
 │   │   reranker.rerank(query, results)                   # RerankerProtocol
 │   │
 │   └── If HYBRID:
@@ -389,9 +389,9 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │
 ├── STEP 6: CRAG VALIDATION
 │   Check confidence of retrieved chunks via RerankerProtocol
-│   If chunks lack confidence → llm_query_extractor generates abstract synonyms
-│   └── Re-embeds synonym fallback query → searches Qdrant natively again
-│   └── If still no confidence → returns top 3 fallback chunks as failsafe
+│   If chunks lack confidence → llm_query_extractor searches using synonym fallback query
+│   └── Re-embeds synonym query → searches VectorStore natively again
+│   └── If still no confidence → gracefully degrades, returning top 3 fallback chunks as failsafe without synthetic context generation.
 │
 ├── STEP 7: MEMORY INJECTION
 │   memory.recall(team_id, query) → list[MemoryEntry]    # centrag/memory/in_memory_store.py

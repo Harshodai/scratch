@@ -65,6 +65,8 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 12 | **LLM-Driven Agent Selection** | The LLM itself decides the orchestration strategy at query time. Based on query complexity, it routes to: cache-only (SIMPLE), standard RAG (STANDARD), multi-step retrieval (COMPLEX), or full multi-agent orchestration (RESEARCH). This replaces static routing with dynamic, context-aware selection. See `CROSS_REPO_ANALYSIS.md §3`. |
 | 13 | **Context Engineering** | Aggressive context management: isolated sub-agent contexts, mid-session summarization, memory compression, and progressive skill loading. Inspired by DeerFlow's context summarization and AgentScope's memory compression. See `LEARNING_AND_ROADMAP.md Phase 2`. |
 | 14 | **MCP-First Integration** | All external data source connections (Oracle GOS DB, DynamoDB, Confluence, etc.) are exposed as MCP servers using stdio transport. The retrieval engine acts as an MCP client. This standardizes all integrations via the Model Context Protocol. See `MCP_DEPLOYMENT_GUIDE.md`. |
+*   **Storage (S3)**: Encrypted at rest via AES-256 (KMS). Use **Envelope Encryption** for document chunks where possible (Phase 5).
+*   **Database (Aurora/Qdrant)**: Full disk encryption via AWS managed keys. Support for **Customer Managed Keys (CMK / BYOK)** at the Enterprise tier.
 
 ---
 
@@ -578,12 +580,12 @@ Client crash or network disconnect during retrieval:
 | Component | Sizing | Est. Cost/Month |
 |-----------|--------|:---------------:|
 | EKS Cluster (control plane) | 1 cluster | $73 |
-| EKS Nodes (app tier) | 6x r6g.large on-demand | ~$550 |
-| EKS Nodes (ingestion) | 1-5x r6g.large spot | ~$100 |
-| Aurora PostgreSQL | r6g.xlarge Multi-AZ | ~$460 |
+| EKS Nodes (app tier) | 6x r6g.large on-demand | ~$440 |
+| EKS Nodes (ingestion) | 1-5x r6g.large spot | ~$120 |
+| Aurora PostgreSQL | r6g.xlarge Multi-AZ | ~$590 |
 | ElastiCache Redis | r6g.large cluster (3 shards) | ~$520 |
 | Qdrant (on EKS) | 3x r6g.2xlarge + 300GB gp3 | ~$900 |
-| Neptune | db.r6g.large Multi-AZ | ~$500 |
+| Neptune (Phase 6) | db.r6g.large Multi-AZ | ~$290 |
 | S3 | 500GB + lifecycle policies | ~$12 |
 | SQS | ~1M messages/month | ~$1 |
 | Bedrock Embeddings | ~10M tokens/month | ~$1 |
@@ -591,7 +593,7 @@ Client crash or network disconnect during retrieval:
 | ALB + WAF | Shared | ~$50 |
 | CloudWatch | Logs + metrics | ~$30 |
 | NAT Gateway | 3× (one per AZ) | ~$100 |
-| **Total** | | **~$3,500/month** |
+| **Total** | | **~$3,330/month** |
 
 > Estimated **~$70/team/month** at 50 teams. Compare to teams each running their own infrastructure.
 > **Note:** Neptune is Phase 6 (optional). Excluding it reduces cost to ~$3,000/month (~$60/team).

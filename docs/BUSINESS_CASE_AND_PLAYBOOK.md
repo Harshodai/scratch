@@ -14,8 +14,8 @@
 |---------|:-----------------:|:------------------:|
 | Each team builds their own RAG pipeline | 2–4 weeks of engineering time | **100–200 weeks** wasted annually |
 | No shared chunking/embedding standards | Inconsistent retrieval quality (some teams use naive fixed-size chunking) | **Unpredictable answer quality** across org |
-| No centralized memory layer | Every session starts from scratch; users repeat context | **Significant portion of queries** are redundant re-explanations (est. 15-30%, measure via pilot) |
-| No cache layer | Every query hits LLM ($$$) | **$50,000–$150,000/year** in avoidable LLM costs |
+| No centralized memory layer | Every session starts from scratch; users repeat context | **Projected target:** 15-30% reduction in query-repeat overhead (industry benchmark: Glean) |
+| No cache layer | Every query hits LLM ($$$) | **Targeting** 40-70% reduction in LLM API costs via 4-tier caching |
 | No governance / PII controls | Risk of data leaks, no audit trail | **Compliance violation risk** (SOX, GDPR) |
 | No observability into AI chains | Can't debug hallucinations, can't measure quality | **Zero visibility** into AI accuracy |
 | Siloed data per team | Team A's docs not discoverable by Team B (when permitted) | **Knowledge fragmentation** across the org |
@@ -33,8 +33,8 @@
 | Benefit | Metric | Before CentRAG | After CentRAG | Savings |
 |---------|--------|:--------------:|:-------------:|:-------:|
 | **Engineering time saved** | Weeks to deploy RAG per team | 2–4 weeks | 30 minutes (API key + upload) | **97% reduction** |
-| **LLM cost reduction** | Monthly LLM spend | $1,000–$5,000/team (direct API) | ~$70–200/team (shared + cached) | **80–95% reduction** (varies by cache hit rate) |
-| **Cache hit ratio** | % queries served from cache | 0% (no cache) | 40–60% (L1+L2+L3) | **50% fewer LLM calls** |
+| **LLM cost reduction** | Monthly LLM spend | $1,000–$5,000/team (direct API) | ~$70–200/team (est. target) | **Target 80–90% reduction** (volume dependent) |
+| **Cache hit ratio** | % queries served from cache | 0% (no cache) | Target: 40–60% (L1+L2+L3) | **50% fewer LLM calls (target)** |
 | **Information retrieval time** | Time to find answers | 15–30 min (manual search) | 2–5 sec (RAG query) | **99% faster** |
 | **Support ticket deflection** | Internal tickets for data questions | 100% manual | 40–60% auto-resolved | **50% ticket reduction** |
 | **Onboarding speed** | New hire time-to-productivity | 4–6 weeks | 1–2 weeks (AI-assisted) | **66% faster** |
@@ -57,7 +57,7 @@
                         Per-Team RAG              CentRAG Platform
                         ────────────              ────────────────
 Setup time              2-4 weeks                 30 minutes
-Cost per team/month     $1,000-$5,000             ~$70-200
+Cost per team/month     $1,000-$5,000             ~$70-200 (Targeting)
 Security                Ad-hoc (each team's       Defence-in-depth (WAF →
                         interpretation)            Auth → Rate Limit → PII →
                                                    Audit → RLS)
@@ -99,8 +99,8 @@ Knowledge sharing       Impossible                Cross-team (when permitted)
 
 ```
 Platform development cost:  $150,000
-Monthly savings:            ~$140,000–$190,000/month vs. per-team approach
-Payback period:             ~1 month after MVP launch
+Monthly savings (target):   ~$140,000–$190,000/month (at scale)
+Payback period (est):       ~1-2 months after MVP launch (conservative)
 ```
 
 ---

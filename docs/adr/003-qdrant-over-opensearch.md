@@ -17,4 +17,4 @@ We elected to use **Qdrant** instead of OpenSearch.
    - Rust-native vector primitives offer near real-time ingestion indexing latency.
 2. **Cons:**
    - Lacks historical log analytics dashboards (Kibana). 
-   - OpenSearch standard string queries (lucence format) are not supported.
+   - OpenSearch standard string queries (Lucene format) are not supported.

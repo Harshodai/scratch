@@ -239,6 +239,7 @@ class RetrievalEngine:
         self.__vectorstore = None
         self.__reranker = None
         self.__llm = None
+        self._sparse_embedder_instance = None
 
         self.budget_manager = TokenBudgetManager()
 
@@ -249,9 +250,9 @@ class RetrievalEngine:
         
     @property
     def _sparse_embedder(self) -> SparseEmbedderProtocol | None:
-        if not hasattr(self, "__sparse_embedder"):
-            self.__sparse_embedder = self._sparse_embedder_factory() if self._sparse_embedder_factory else None
-        return self.__sparse_embedder
+        if self._sparse_embedder_instance is None:
+            self._sparse_embedder_instance = self._sparse_embedder_factory() if self._sparse_embedder_factory else None
+        return self._sparse_embedder_instance
 
     @property
     def _vectorstore(self) -> VectorStoreProtocol:
@@ -395,7 +396,11 @@ class RetrievalEngine:
                 query_embedding = await self._embedder.embed_query(sanitized_query)
                 sparse_vector = await self._sparse_embedder.embed_sparse(sanitized_query) if self._sparse_embedder else None
                 embed_token_estimate = len(sanitized_query.split()) * 2
-                search_filter = query_filter if query_filter else VectorFilter.for_team(ctx.team_id)
+                # Ensure team-isolation is ALWAYS the baseline filter before merging LLM extractions
+                search_filter = VectorFilter.for_team(ctx.team_id)
+                if query_filter:
+                    search_filter.must.extend(query_filter.must)
+                    search_filter.must_not.extend(query_filter.must_not)
                 search_filter = search_filter.with_condition(
                     "namespace", request.namespace
                 )

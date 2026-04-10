@@ -47,6 +47,7 @@ from centrag.implementations.noop_vectorstore import NoOpVectorStore
 from centrag.implementations.noop_reranker import NoOpReranker
 from centrag.implementations.bm25_sparse_embedder import BM25SparseEmbedder
 from centrag.implementations.llm_query_extractor import LLMQueryExtractor
+from centrag.implementations.hyde_transformer import HyDETransformer
 
 # --- VECTORLESS path implementations (reasoning-based) ---
 from centrag.implementations.pageindex_tree import PageIndexTreeBuilder
@@ -170,8 +171,14 @@ def build_retrieval_engine(
     hybrid_retriever = HybridRetriever(k=60)
 
     # --- QUERY TRANSFORMATION & SPARSE EMBEDDING ---
-    # Note: In a real system, the transformer's LLM config might differ, but we reuse the NoOp/provided LLM factory payload logic.
-    query_transformer = LLMQueryExtractor(llm=NoOpLLM(model_name="noop-llm-transformer"))
+    # Strategy pattern: select transformer based on config
+    llm_for_transform = NoOpLLM(model_name="noop-llm-transformer")
+    if settings.query_transformer_strategy == "hyde":
+        query_transformer = HyDETransformer(llm=llm_for_transform)
+        logger.info("using_hyde_transformer")
+    else:
+        query_transformer = LLMQueryExtractor(llm=llm_for_transform)
+        logger.info("using_llm_extractor_transformer")
 
     # --- Build the engine ---
     engine = RetrievalEngine(

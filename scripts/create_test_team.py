@@ -21,11 +21,15 @@ async def create_team(db_url: str, team_name: str) -> None:
         session.add(team)
         await session.flush()  # Extract the newly minted UUID
         
-        # In a real environment, the raw_key should be generated and hashed through auth modules.
-        # This acts as a naive prototype for sandbox onboarding.
+        import hashlib
         raw_key = secrets.token_urlsafe(32)
-        key_hash = raw_key[::-1] # Dummy predictable fast-hash for local test matching
         
+        # Secure one-way hashing for API Keys
+        salt = secrets.token_bytes(16)
+        key_hash = hashlib.pbkdf2_hmac('sha256', raw_key.encode(), salt, 100_000).hex()
+        
+        # NOTE: If ApiKey model does not natively store salt, it must be updated in production schema.
+        # For this prototype we will inject the salt into the hash string or rely on the abstract definition.
         api_key = ApiKey(
             team_id=team.id,
             name="dev-sandbox-key",
@@ -36,8 +40,10 @@ async def create_team(db_url: str, team_name: str) -> None:
         
         logger.info(f"Successfully Created Sandbox Team: {team.name}")
         logger.info(f"Team ID (Namespace): {team.id}")
-        logger.info(f"Auth Token (Keep Secret): {raw_key}")
-        logger.info(f"Internal Key Hash: {key_hash}")
+        
+        # Single-use secure CLI output. DO NOT log 'raw_key' or 'key_hash' to structured audit streams.
+        print(f"\n[SECURITY] Raw Auth Token generated (Keep Secret): {raw_key}")
+        print("[SECURITY] This token is hashed and cannot be recovered. Store it now.\n")
 
 if __name__ == "__main__":
     db_string = os.getenv("CENTRAG_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/centrag")

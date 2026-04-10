@@ -68,7 +68,7 @@ class LLMQueryExtractor(QueryTransformerProtocol):
             intent = QueryIntent(
                 optimized_query=parsed.get("optimized_query", raw_query),
                 expansions=parsed.get("expansions", []),
-                extracted_filter=v_filter if filters_dict else None,
+                extracted_filter=v_filter,  # v_filter explicitly contains the team_id base requirement
             )
             
             logger.info(

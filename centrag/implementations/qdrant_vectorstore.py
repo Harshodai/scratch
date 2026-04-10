@@ -187,7 +187,7 @@ class QdrantVectorStore:
         points = []
         for i, (id_val, vec, pay) in enumerate(zip(ids, vectors, payloads)):
             vector_data: Any = vec
-            if sparse_vectors and sparse_vectors[i]:
+            if sparse_vectors and i < len(sparse_vectors) and sparse_vectors[i]:
                 sv = sparse_vectors[i]
                 assert sv is not None
                 vector_data = {

@@ -35,60 +35,41 @@ CentRAG:         Logs → Ingestion → Index → RAG → "Why did DAG X fail at
                                                     → Instant, cited answer
 ```
 
-### A.3 Architecture: Log Ingestion Pipeline
+### A.3 Architecture: Log Ingestion Pipeline (4-Stage Smart Architecture)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        LOG COLLECTION LAYER                                 │
-│                                                                             │
-│  ┌── EKS Pods ──┐    ┌── ECS Tasks ──┐    ┌── Airflow ──┐   ┌── Lambda ──┐│
-│  │  Fluent Bit   │    │  FireLens     │    │  S3 remote  │   │  CW Logs   ││
-│  │  (DaemonSet)  │    │  (sidecar)    │    │  log store  │   │  (built-in)││
-│  └──────┬────────┘    └──────┬────────┘    └──────┬──────┘   └──────┬─────┘│
-│         │                    │                    │                  │      │
-│         └──────────┬─────────┴──────────┬─────────┘                 │      │
-│                    │                    │                            │      │
-│                    ▼                    ▼                            │      │
-│         ┌────────────────┐   ┌──────────────────┐                   │      │
-│         │ Kinesis Data   │   │ CloudWatch Logs   │←──────────────────┘      │
-│         │ Firehose       │   │ Subscription      │                         │
-│         │ (buffered)     │   │ Filter            │                         │
-│         └───────┬────────┘   └────────┬──────────┘                         │
-│                 │                     │                                     │
-└─────────────────┼─────────────────────┼─────────────────────────────────────┘
-                  │                     │
-                  ▼                     ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     LOG PROCESSING LAYER                                    │
-│                                                                             │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                    SQS FIFO Queue                                    │   │
-│  │              (team_id, source, log_type)                             │   │
-│  └───────────────────────────┬──────────────────────────────────────────┘   │
-│                              │                                              │
-│  ┌───────────────────────────▼──────────────────────────────────────────┐   │
-│  │         Log Ingestion Worker — DEPRECATED: SEE RESILIENCY DOC        │   │
-│  │   ⚠️  This shows the ORIGINAL design. The corrected 4-stage         │   │
-│  │      pipeline (Filter→Aggregate→Summarize→Embed) is in              │   │
-│  │      RESILIENCY_LOGS_REQUIREMENTS.md Part 1.                        │   │
-│  │                                                                      │   │
-│  │  1. Parse JSON log lines                                             │   │
-│  │  2. Classify log type (error, info, warning, trace, metric)          │   │
-│  │  3. Extract structured fields:                                       │   │
-│  │     - timestamp, level, service, pod, container                     │   │
-│  │     - error_class, stack_trace (if error)                            │   │
-│  │     - dag_id, task_id, run_id (if Airflow)                          │   │
-│  │     - trace_id, span_id (if OTel)                                   │   │
-│  │  4. PII redaction (scrub before storage)                             │   │
-│  │  5. Semantic chunking (group related log lines by correlation_id)    │   │
-│  │  6. Generate embeddings (Bedrock Titan v2)                           │   │
-│  │  7. Upsert to Qdrant: collection=app_logs, payload={team_id, ...}   │   │
-│  │  8. Store raw lines in S3: s3://logs/{team_id}/{date}/{source}/     │   │
-│  │  9. Insert metadata in PostgreSQL (log_sources table)                │   │
-│  │                                                                      │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+                    STAGE 1: FILTER (at source)
+                    ──────────────────────────
+Raw Logs            Fluent Bit / OTel Collector
+500 GB/day          ├── DROP: Health checks, heartbeats, debug noise
+                    ├── KEEP: 100% of ERROR, FATAL, SECURITY events
+                    └── SAMPLE: INFO logs at 5% rate
+                    Output: ~10 GB/day (98% reduction)
+                           │
+                           ▼
+                    STAGE 2: AGGREGATE (in worker)
+                    ──────────────────────────────
+Filtered Logs       SQS → Aggregation Worker
+10 GB/day           ├── Group by correlation_id / trace_id
+                    ├── Deduplicate error signatures
+                    └── PII redaction (before storage)
+                    Output: ~1 GB/day (10x reduction)
+                           │
+                           ▼
+                    STAGE 3: SUMMARIZE (via LLM)
+                    ────────────────────────────
+Aggregated Events   LLM Summarizer (Bedrock Claude Haiku)
+1 GB/day            ├── Input: grouped log event metadata
+                    └── Output: 2-3 sentence natural language summary
+                    Output: ~200 MB/day (summaries only)
+                           │
+                           ▼
+                    STAGE 4: EMBED + STORE (final)
+                    ──────────────────────────────
+Log Summaries       Embedding (Titan v2) + Qdrant Upsert
+200 MB/day          ├── Embed summary text (1024-dim)
+                    ├── Upsert to Qdrant: collection=log_summaries
+                    └── Raw grouped logs → S3 (cold storage)
 ```
 
 ### A.4 Source-Specific Collection
@@ -180,7 +161,9 @@ class AppLogsMCPConnector(BaseConnector):
 
 ### B.1 Vision
 
-> CentRAG starts as a RAG platform. It **evolves** into an AI observability knowledge base — where teams can trace, evaluate, debug, and improve their agentic applications. Think LangSmith, but self-hosted, namespace-isolated, and integrated with CentRAG's RAG capabilities.
+> CentRAG starts as a RAG platform. It evolves into an AI observability knowledge base — where teams can trace, evaluate, debug, and improve their agentic applications. 
+> 
+> **Privacy Correction:** LangChain/LangSmith *does* support self-hosting on-premises at the Enterprise tier. However, CentRAG abstracts this complexity by providing it as a baseline service for all internal teams, eliminating the need for individual teams to manage their own tracing infrastructure, namespace-isolated, and integrated with CentRAG's RAG capabilities.
 
 ### B.2 Architecture Evolution
 
@@ -431,17 +414,10 @@ What the CentRAG team can see:
   ✅ Metadata only: file sizes, timestamps, team names, API usage counts
 
 ⚠️  EMBEDDING CAVEAT:
-  Vector embeddings are stored as plaintext vectors in Qdrant's memory
-  because similarity search (cosine/dot-product) requires unencrypted
-  floating-point values. However:
-  - Qdrant's disk storage is encrypted at rest (EBS encryption with team CMK)
-  - Embeddings cannot be reversed to reconstruct original text
-    (embedding is a one-way lossy function)
-  - Qdrant is in a private subnet with no internet access
-  - All access requires team_id payload filter (no anonymous search)
-  - This is the SAME model used by Pinecone, Weaviate, and all major
-    vector DB providers — there is no production system that does
-    similarity search on application-layer-encrypted vectors
+> Similarity search requires the LLM/Vector DB to perceive the semantic relation between vectors.
+> While we **encrypt vectors at rest (AES-256)**, the similarity search process itself operates
+> on unencrypted numeric vectors in memory. Encryption-at-rest does NOT mean the search
+> is performed on encrypted data; it means the data is secure while persisting on disk.
 ```
 
 **Key properties that leadership needs to hear:**
