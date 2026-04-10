@@ -55,3 +55,17 @@ class EmbedderProtocol(Protocol):
             One embedding per chunk, but each is context-aware of the full document.
         """
         ...
+
+
+@runtime_checkable
+class SparseEmbedderProtocol(Protocol):
+    """Contract for sparse embedding providers (e.g., BM25, SPLADE)."""
+
+    async def embed_sparse(self, text: str) -> dict[int, float]:
+        """
+        Embed a string into a sparse vector mapping.
+        
+        Returns:
+            A dictionary where keys are token indices and values are their weights.
+        """
+        ...

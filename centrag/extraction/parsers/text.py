@@ -6,7 +6,7 @@ Each class implements ExtractorProtocol and registers for its content types.
 """
 from __future__ import annotations
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import (
     ContentType,
@@ -15,7 +15,7 @@ from centrag.abstractions.extractor import (
     ExtractorProtocol,
 )
 
-logger = structlog.get_logger("extraction.parsers.text")
+logger = get_logger("extraction.parsers.text")
 
 
 class PlainTextParser:

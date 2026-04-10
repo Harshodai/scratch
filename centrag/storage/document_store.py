@@ -32,9 +32,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("storage.document_store")
+logger = get_logger("storage.document_store")
 
 
 @dataclass(frozen=True)

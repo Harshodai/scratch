@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.guardrail import (
     InputRailProtocol,
@@ -40,7 +40,7 @@ from centrag.abstractions.guardrail import (
 )
 from centrag.guardrails.pii import PII_PATTERNS, redact_pii, detect_pii
 
-logger = structlog.get_logger("guardrails.engine")
+logger = get_logger("guardrails.engine")
 
 
 # =============================================================================

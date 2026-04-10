@@ -32,7 +32,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.observability import (
     TracingProtocol,
@@ -41,7 +41,7 @@ from centrag.observability import (
     SpanKind,
 )
 
-logger = structlog.get_logger("observability.otel")
+logger = get_logger("observability.otel")
 
 
 class OTelTracer:

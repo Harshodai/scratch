@@ -34,12 +34,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.tree_index import TreeIndexProtocol, PageContent
 from centrag.storage.document_store import DocumentStore
 
-logger = structlog.get_logger("retrieval.pageindex")
+logger = get_logger("retrieval.pageindex")
 
 
 # ── Prompt Templates ────────────────────────────────────────────────

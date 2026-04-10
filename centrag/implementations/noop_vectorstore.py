@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.vectorstore import (
     VectorFilter,
@@ -19,7 +19,7 @@ from centrag.abstractions.vectorstore import (
     VectorStoreProtocol,
 )
 
-logger = structlog.get_logger("implementations.vectorstore.noop")
+logger = get_logger("implementations.vectorstore.noop")
 
 
 @dataclass

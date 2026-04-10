@@ -30,12 +30,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.ingestion.service import IngestionService, IngestionResult
 from centrag.storage.document_store import DocumentStore
 
-logger = structlog.get_logger("ingestion.worker")
+logger = get_logger("ingestion.worker")
 
 
 class JobStatus(str, Enum):

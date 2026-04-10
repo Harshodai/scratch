@@ -57,6 +57,12 @@ curl -X POST http://localhost:8000/v1/retrieve \
 | [MCP_IMPLEMENTATION_GUIDE.md](docs/MCP_IMPLEMENTATION_GUIDE.md) | How to build and wire MCP tools |
 | [RAG_MCP_INTEGRATION_GUIDE.md](docs/RAG_MCP_INTEGRATION_GUIDE.md) | Connecting RAG pipeline to external MCP servers |
 
+### "How do the retrieval algorithms (CRAG, Hybrid RRF, Sparse Embeddings) work?"
+| Doc | What you'll learn |
+|-----|-------------------|
+| [CODE_FLOW.md](docs/CODE_FLOW.md) | Explains the Query Transformation, native BM25 Qdrant injection, and CRAG fallback loop. |
+| [ARCHITECTURE_LLD.md](docs/ARCHITECTURE_LLD.md) | Low-level design of `EmbedderProtocol` and `QueryTransformerProtocol`. |
+
 ### "What about security and compliance?"
 | Doc | What you'll learn |
 |-----|-------------------|

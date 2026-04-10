@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 import asyncio
 from typing import AsyncIterator
 
-import structlog
+from centrag.utils.logger import get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -33,7 +33,7 @@ from centrag.storage.document_store import DocumentStore
 from centrag.ingestion.worker import IngestionWorker, WorkerConfig
 from centrag.middleware.rate_limiter import SimpleRateLimitMiddleware
 
-logger = structlog.get_logger()
+logger = get_logger()
 
 
 async def _init_postgres(app: FastAPI, settings: Settings):

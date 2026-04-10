@@ -33,7 +33,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Callable, List
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions import (
     CacheProtocol,
@@ -43,6 +43,8 @@ from centrag.abstractions import (
     RerankerProtocol,
     VectorStoreProtocol,
 )
+from centrag.abstractions.embedder import SparseEmbedderProtocol
+from centrag.abstractions.query_transformer import QueryTransformerProtocol
 from centrag.abstractions.cache import CacheResult, CacheTier
 from centrag.abstractions.llm import LLMResponse, QueryComplexity
 from centrag.abstractions.guardrail import (
@@ -55,7 +57,7 @@ from centrag.abstractions.vectorstore import VectorFilter
 from centrag.middleware import RequestContext
 import time
 
-logger = structlog.get_logger()
+logger = get_logger()
 
 
 # =============================================================================
@@ -207,10 +209,15 @@ class RetrievalEngine:
         # --- SHARED: Dual-path routing (Day 3) ---
         query_router: Any | None = None,
         hybrid_retriever: Any | None = None,
+        # --- QUERY TRANSFORMATION ---
+        query_transformer: QueryTransformerProtocol | None = None,
+        # --- SPARSE EMBEDDER ---
+        sparse_embedder_factory: Callable[[], SparseEmbedderProtocol] | None = None,
     ) -> None:
         # Pattern 3: Pervasive Lazy Loading
         # SDKs (boto3, transformers) only initialize when their property is first accessed.
         self._embedder_factory = embedder_factory
+        self._sparse_embedder_factory = sparse_embedder_factory
         self._vectorstore_factory = vectorstore_factory
         self._reranker_factory = reranker_factory
         self._llm_factory = llm_factory
@@ -226,6 +233,7 @@ class RetrievalEngine:
         # SHARED: Dual-path routing
         self._query_router = query_router
         self._hybrid_retriever = hybrid_retriever
+        self._query_transformer = query_transformer
 
         self.__embedder = None
         self.__vectorstore = None
@@ -239,6 +247,12 @@ class RetrievalEngine:
         if not self.__embedder: self.__embedder = self._embedder_factory()
         return self.__embedder
         
+    @property
+    def _sparse_embedder(self) -> SparseEmbedderProtocol | None:
+        if not hasattr(self, "__sparse_embedder"):
+            self.__sparse_embedder = self._sparse_embedder_factory() if self._sparse_embedder_factory else None
+        return self.__sparse_embedder
+
     @property
     def _vectorstore(self) -> VectorStoreProtocol:
         if not self.__vectorstore: self.__vectorstore = self._vectorstore_factory()
@@ -317,6 +331,14 @@ class RetrievalEngine:
                 )
                 return cached_response
 
+            # --- Step 2.5: Query Transformation (Metadata Extraction) ---
+            query_filter: VectorFilter | None = None
+            if self._query_transformer:
+                intent = await self._query_transformer.transform(sanitized_query, ctx.team_id)
+                sanitized_query = intent.optimized_query
+                query_filter = intent.extracted_filter
+                log.info("query_transformed", optimized_query=sanitized_query, has_filters=bool(query_filter))
+
             # --- Step 3: Retrieval (DUAL-PATH) ---
             # Route to VECTORLESS or VECTOR path based on request.mode
             use_pageindex = (
@@ -371,8 +393,10 @@ class RetrievalEngine:
                 retrieval_source = "vector" if not use_pageindex else retrieval_source
 
                 query_embedding = await self._embedder.embed_query(sanitized_query)
+                sparse_vector = await self._sparse_embedder.embed_sparse(sanitized_query) if self._sparse_embedder else None
                 embed_token_estimate = len(sanitized_query.split()) * 2
-                search_filter = VectorFilter.for_team(ctx.team_id).with_condition(
+                search_filter = query_filter if query_filter else VectorFilter.for_team(ctx.team_id)
+                search_filter = search_filter.with_condition(
                     "namespace", request.namespace
                 )
                 raw_results = await self._vectorstore.search(
@@ -380,6 +404,7 @@ class RetrievalEngine:
                     vector=query_embedding,
                     filter=search_filter,
                     limit=request.max_results * 3,
+                    sparse_vector=sparse_vector,
                 )
                 log.info("vector_search_complete", result_count=len(raw_results))
 
@@ -402,9 +427,43 @@ class RetrievalEngine:
 
                 # --- Step 5: CRAG — Corrective validation ---
                 confident_chunks = [r for r in reranked if r.is_confident]
+                crag_retried = False
+                fallback_reranked = None
+
+                if not confident_chunks and self._query_transformer:
+                    log.warning("crag_low_confidence", message="Advisor intercepting bad context. Triggering CRAG rewrite fallback.")
+                    intent = await self._query_transformer.transform(f"Abstract synonym generation for: {sanitized_query}", ctx.team_id)
+                    fallback_query = " ".join(intent.expansions) if intent.expansions else intent.optimized_query
+                    
+                    fallback_embedding = await self._embedder.embed_query(fallback_query)
+                    fallback_sparse = await self._sparse_embedder.embed_sparse(fallback_query) if self._sparse_embedder else None
+                    embed_token_estimate += len(fallback_query.split()) * 2
+                    
+                    fallback_results = await self._vectorstore.search(
+                        collection="documents",
+                        vector=fallback_embedding,
+                        filter=search_filter,
+                        limit=request.max_results,
+                        sparse_vector=fallback_sparse,
+                    )
+                    
+                    if fallback_results:
+                        fallback_reranked = await self._reranker.rerank(
+                            query=request.query,
+                            documents=[r.payload.get("content", "") for r in fallback_results],
+                            top_n=request.max_results,
+                        )
+                        confident_chunks = [r for r in fallback_reranked if r.is_confident]
+                        raw_results = fallback_results
+                        crag_retried = True
+                        log.info("crag_fallback_complete", recovered_chunks=len(confident_chunks))
+
                 if not confident_chunks:
-                    log.warning("crag_low_confidence", message="Advisor intercepting bad context.")
-                    confident_chunks = reranked[:3]
+                    log.warning("crag_fallback_failed", message="No confident context available even after rewrite. Returning top 3.")
+                    if crag_retried and fallback_reranked is not None:
+                        confident_chunks = fallback_reranked[:3]
+                    else:
+                        confident_chunks = reranked[:3]
 
                 sources = [
                     SourceChunk(

@@ -11,11 +11,11 @@ from __future__ import annotations
 import time
 from typing import Any, AsyncIterator
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.llm import LLMProtocol, LLMResponse, QueryComplexity
 
-logger = structlog.get_logger("implementations.llm.noop")
+logger = get_logger("implementations.llm.noop")
 
 
 class NoOpLLM:

@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.memory import (
     MemoryProtocol,
@@ -24,7 +24,7 @@ from centrag.abstractions.memory import (
     MemoryType,
 )
 
-logger = structlog.get_logger("memory.in_memory")
+logger = get_logger("memory.in_memory")
 
 
 class InMemoryStore:

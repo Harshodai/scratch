@@ -13,9 +13,9 @@ import hashlib
 import random
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("implementations.embedder.noop")
+logger = get_logger("implementations.embedder.noop")
 
 NOOP_DIMENSION = 1024  # Match Titan Embed v2 default
 

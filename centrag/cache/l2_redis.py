@@ -12,11 +12,11 @@ import hashlib
 import json
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
 
-logger = structlog.get_logger("cache.l2")
+logger = get_logger("cache.l2")
 
 
 class L2RedisCache:

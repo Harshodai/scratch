@@ -1,9 +1,9 @@
 import time
 import inspect
 from contextlib import contextmanager
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 @contextmanager
 def track_slow_operation(

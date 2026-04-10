@@ -14,11 +14,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
 
-logger = structlog.get_logger("cache.orchestrator")
+logger = get_logger("cache.orchestrator")
 
 
 class TieredCacheOrchestrator:

@@ -8,11 +8,11 @@ Production replacement: CohereReranker, CrossEncoderReranker.
 """
 from __future__ import annotations
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.reranker import RerankerProtocol, RerankResult
 
-logger = structlog.get_logger("implementations.reranker.noop")
+logger = get_logger("implementations.reranker.noop")
 
 
 class NoOpReranker:

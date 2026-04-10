@@ -8,7 +8,7 @@ Design: This is a LEAF in the Strategy Pattern — implements ExtractorProtocol
 """
 from __future__ import annotations
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import (
     ContentType,
@@ -17,7 +17,7 @@ from centrag.abstractions.extractor import (
     ExtractorProtocol,
 )
 
-logger = structlog.get_logger("extraction.parsers.pdf")
+logger = get_logger("extraction.parsers.pdf")
 
 
 class PDFParser:

@@ -23,9 +23,9 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("retrieval.hybrid")
+logger = get_logger("retrieval.hybrid")
 
 
 @dataclass(frozen=True)

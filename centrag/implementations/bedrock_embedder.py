@@ -24,11 +24,11 @@ import json
 import hashlib
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.embedder import EmbedderProtocol
 
-logger = structlog.get_logger("implementations.embedder.bedrock")
+logger = get_logger("implementations.embedder.bedrock")
 
 
 class BedrockEmbedder:

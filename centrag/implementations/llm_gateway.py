@@ -24,11 +24,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, AsyncIterator
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.llm import LLMProtocol, LLMResponse, QueryComplexity
 
-logger = structlog.get_logger("llm_gateway")
+logger = get_logger("llm_gateway")
 
 
 # ── Circuit Breaker ─────────────────────────────────────────────────

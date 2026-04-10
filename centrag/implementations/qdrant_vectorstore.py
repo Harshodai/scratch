@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.vectorstore import (
     VectorStoreProtocol,
@@ -26,7 +26,7 @@ from centrag.abstractions.vectorstore import (
     VectorSearchResult,
 )
 
-logger = structlog.get_logger("implementations.qdrant")
+logger = get_logger("implementations.qdrant")
 
 
 class QdrantVectorStore:
@@ -67,7 +67,7 @@ class QdrantVectorStore:
         if self._client is None:
             try:
                 from qdrant_client import QdrantClient
-                from qdrant_client.models import Distance, VectorParams
+                from qdrant_client.models import Distance, VectorParams, SparseVectorParams, Modifier
 
                 self._client = QdrantClient(
                     url=self._url,
@@ -86,6 +86,11 @@ class QdrantVectorStore:
                             distance=Distance.COSINE,
                             on_disk=self._on_disk,
                         ),
+                        sparse_vectors_config={
+                            "sparse": SparseVectorParams(
+                                modifier=Modifier.NONE
+                            )
+                        },
                     )
                     logger.info(
                         "qdrant_collection_created",
@@ -143,15 +148,27 @@ class QdrantVectorStore:
         id: str,
         vector: list[float],
         payload: dict[str, Any],
+        sparse_vector: dict[int, float] | None = None,
     ) -> None:
         """Insert or update a single vector with payload."""
-        from qdrant_client.models import PointStruct
+        from qdrant_client.models import PointStruct, SparseVector
+
+        # If a sparse vector is provided, Qdrant allows passing a dict of vectors
+        vector_data: Any = vector
+        if sparse_vector:
+            vector_data = {
+                "": vector,  # "" is the default unnamed dense vector
+                "sparse": SparseVector(
+                    indices=list(sparse_vector.keys()),
+                    values=list(sparse_vector.values())
+                )
+            }
 
         client = self._get_client()
         client.upsert(
             collection_name=collection,
             points=[
-                PointStruct(id=id, vector=vector, payload=payload)
+                PointStruct(id=id, vector=vector_data, payload=payload)
             ],
         )
 
@@ -161,15 +178,26 @@ class QdrantVectorStore:
         ids: list[str],
         vectors: list[list[float]],
         payloads: list[dict[str, Any]],
+        sparse_vectors: list[dict[int, float] | None] | None = None,
     ) -> None:
         """Batch upsert for ingestion throughput."""
-        from qdrant_client.models import PointStruct
+        from qdrant_client.models import PointStruct, SparseVector
 
         client = self._get_client()
-        points = [
-            PointStruct(id=id, vector=vec, payload=pay)
-            for id, vec, pay in zip(ids, vectors, payloads)
-        ]
+        points = []
+        for i, (id_val, vec, pay) in enumerate(zip(ids, vectors, payloads)):
+            vector_data: Any = vec
+            if sparse_vectors and sparse_vectors[i]:
+                sv = sparse_vectors[i]
+                assert sv is not None
+                vector_data = {
+                    "": vec,
+                    "sparse": SparseVector(
+                        indices=list(sv.keys()),
+                        values=list(sv.values())
+                    )
+                }
+            points.append(PointStruct(id=id_val, vector=vector_data, payload=pay))
 
         # Qdrant batch size limit is ~100 points per request
         batch_size = 100
@@ -190,18 +218,51 @@ class QdrantVectorStore:
         filter: VectorFilter,
         limit: int = 10,
         score_threshold: float | None = None,
+        sparse_vector: dict[int, float] | None = None,
     ) -> list[VectorSearchResult]:
         """Filtered vector search. ALWAYS requires a team_id filter."""
+        from qdrant_client.models import Prefetch, SparseVector
+        
         client = self._get_client()
         qdrant_filter = self._build_filter(filter)
 
-        results = client.search(
-            collection_name=collection,
-            query_vector=vector,
-            query_filter=qdrant_filter,
-            limit=limit,
-            score_threshold=score_threshold,
-        )
+        if sparse_vector:
+            # Qdrant Hybrid Search (RRF Native) using Prefetch
+            # We prefetch both dense and sparse, then Qdrant merges them.
+            prefetch = [
+                Prefetch(
+                    query=vector,
+                    using="",
+                    limit=limit * 2,
+                    filter=qdrant_filter,
+                ),
+                Prefetch(
+                    query=SparseVector(
+                        indices=list(sparse_vector.keys()),
+                        values=list(sparse_vector.values())
+                    ),
+                    using="sparse",
+                    limit=limit * 2,
+                    filter=qdrant_filter,
+                ),
+            ]
+            
+            results = client.query_points(
+                collection_name=collection,
+                prefetch=prefetch,
+                query=None, # None triggers Qdrant's automatic Fusion RRF
+                limit=limit,
+                score_threshold=score_threshold,
+            ).points
+        else:
+            # Legacy Dense-only search
+            results = client.search(
+                collection_name=collection,
+                query_vector=vector,
+                query_filter=qdrant_filter,
+                limit=limit,
+                score_threshold=score_threshold,
+            )
 
         return [
             VectorSearchResult(

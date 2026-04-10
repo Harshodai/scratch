@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from typing import Any, TypeVar, Callable, Coroutine, Dict
 
 from cachetools import LRUCache
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 

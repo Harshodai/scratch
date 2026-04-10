@@ -20,11 +20,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.embedder import EmbedderProtocol
 
-logger = structlog.get_logger("implementations.embedder.openai")
+logger = get_logger("implementations.embedder.openai")
 
 
 class OpenAIEmbedder:

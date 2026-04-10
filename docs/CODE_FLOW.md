@@ -365,10 +365,14 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │   └── RoutingDecision.path → RetrievalPath enum         # line 30
 │       VECTOR | PAGEINDEX | HYBRID
 │
+├── STEP 4.5: QUERY TRANSFORMATION
+│   llm_query_extractor.transform(query)                 # centrag/implementations/llm_query_extractor.py
+│   └── Outputs optimized intent and VectorFilters
+│
 ├── STEP 5: RETRIEVAL (Path-Dependent)
 │   │
 │   ├── If PAGEINDEX:
-│   │   PageIndexRetriever.retrieve(query, doc_id)       # centrag/retrieval/pageindex_retriever.py
+│   │   PageIndexRetriever.retrieve(optimized_query, doc_id) # centrag/retrieval/pageindex_retriever.py
 │   │   └── LLM navigates the tree index to find pages
 │   │   └── Returns list of relevant page contents
 │   │
@@ -384,8 +388,10 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │       # Reciprocal Rank Fusion: score = Σ 1/(k + rank), k=60
 │
 ├── STEP 6: CRAG VALIDATION
-│   Check confidence of retrieved chunks
-│   If below threshold → rewrite query, retry retrieval
+│   Check confidence of retrieved chunks via RerankerProtocol
+│   If chunks lack confidence → llm_query_extractor generates abstract synonyms
+│   └── Re-embeds synonym fallback query → searches Qdrant natively again
+│   └── If still no confidence → returns top 3 fallback chunks as failsafe
 │
 ├── STEP 7: MEMORY INJECTION
 │   memory.recall(team_id, query) → list[MemoryEntry]    # centrag/memory/in_memory_store.py
@@ -440,7 +446,7 @@ Retrieval: PageIndexRetriever.retrieve(query, doc_id, team_id)
 
 ```
 Ingestion: chunk(text) → embed(chunks) → vectorstore.upsert(vectors, metadata)
-Retrieval: embed(query) → vectorstore.search(vector, top_k) → rerank(results)
+Retrieval: embed(query) → vectorstore.search(vector, top_k, sparse_vectors) → rerank(results)
 ```
 
 ### Path 3: HYBRID (RRF Fusion)

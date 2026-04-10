@@ -34,7 +34,7 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import ContentType
 from centrag.abstractions.tree_index import TreeIndexProtocol
@@ -42,7 +42,7 @@ from centrag.extraction.pipeline import ExtractionPipeline
 from centrag.storage.document_store import DocumentStore, DocumentMeta
 from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig, CleaningResult
 
-logger = structlog.get_logger("ingestion.service")
+logger = get_logger("ingestion.service")
 
 
 # ── Content type mapping ────────────────────────────────────────────

@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import ContentType, ExtractedDocument
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy, ChunkResult
@@ -27,7 +27,7 @@ from centrag.extraction.parsers.base import ParserRegistry
 from centrag.extraction.chunkers.fixed import FixedChunker
 from centrag.extraction.chunkers.recursive import RecursiveChunker
 
-logger = structlog.get_logger("extraction.pipeline")
+logger = get_logger("extraction.pipeline")
 
 
 @dataclass(frozen=True)

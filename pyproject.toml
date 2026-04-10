@@ -55,6 +55,10 @@ dependencies = [
 
     # --- MCP Protocol ---
     "mcp>=1.1.0",                   # Model Context Protocol SDK
+
+    # --- Infrastructure / CDK ---
+    "aws-cdk-lib>=2.150.0",
+    "constructs>=10.3.0",
 ]
 
 [project.optional-dependencies]
@@ -68,11 +72,16 @@ dev = [
     "locust>=2.32.0",               # Load testing
     "ragas>=0.2.0",                 # RAG evaluation
     "deepeval>=1.4.0",              # LLM unit testing
+    "langchain-core",               # Required for external scratch scripts
+    "langchain-community",
 ]
 
 [build-system]
 requires = ["setuptools>=75.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["centrag"]
 
 [tool.ruff]
 target-version = "py312"

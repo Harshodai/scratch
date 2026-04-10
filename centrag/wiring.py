@@ -31,7 +31,7 @@ Usage:
 """
 from __future__ import annotations
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.config import Settings
 
@@ -45,6 +45,8 @@ from centrag.retrieval.hybrid import HybridRetriever
 from centrag.implementations.noop_embedder import NoOpEmbedder
 from centrag.implementations.noop_vectorstore import NoOpVectorStore
 from centrag.implementations.noop_reranker import NoOpReranker
+from centrag.implementations.bm25_sparse_embedder import BM25SparseEmbedder
+from centrag.implementations.llm_query_extractor import LLMQueryExtractor
 
 # --- VECTORLESS path implementations (reasoning-based) ---
 from centrag.implementations.pageindex_tree import PageIndexTreeBuilder
@@ -64,7 +66,7 @@ from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
 from centrag.extraction.pipeline import ExtractionPipeline
 from centrag.extraction.parsers.base import ParserRegistry
 
-logger = structlog.get_logger("wiring")
+logger = get_logger("wiring")
 
 
 def _build_vector_components(settings: Settings):
@@ -167,6 +169,10 @@ def build_retrieval_engine(
     query_router = QueryRouter(document_store=document_store)
     hybrid_retriever = HybridRetriever(k=60)
 
+    # --- QUERY TRANSFORMATION & SPARSE EMBEDDING ---
+    # Note: In a real system, the transformer's LLM config might differ, but we reuse the NoOp/provided LLM factory payload logic.
+    query_transformer = LLMQueryExtractor(llm=NoOpLLM(model_name="noop-llm-transformer"))
+
     # --- Build the engine ---
     engine = RetrievalEngine(
         embedder_factory=embedder_factory,
@@ -181,6 +187,8 @@ def build_retrieval_engine(
         document_store=document_store,
         query_router=query_router,
         hybrid_retriever=hybrid_retriever,
+        query_transformer=query_transformer,
+        sparse_embedder_factory=lambda: BM25SparseEmbedder() if settings.enable_vector else None,
     )
 
     # Wire LLM into PageIndex retriever (same lazy instance)

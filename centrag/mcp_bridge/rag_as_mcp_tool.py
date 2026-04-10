@@ -24,9 +24,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("mcp_bridge.rag_tools")
+logger = get_logger("mcp_bridge.rag_tools")
 
 
 def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:

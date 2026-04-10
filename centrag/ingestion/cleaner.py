@@ -29,11 +29,11 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.guardrails.pii import PII_PATTERNS, detect_pii, redact_pii
 
-logger = structlog.get_logger("ingestion.cleaner")
+logger = get_logger("ingestion.cleaner")
 
 
 @dataclass(frozen=True)

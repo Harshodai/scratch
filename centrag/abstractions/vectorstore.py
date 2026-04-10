@@ -57,6 +57,7 @@ class VectorStoreProtocol(Protocol):
         id: str,
         vector: list[float],
         payload: dict[str, Any],
+        sparse_vector: dict[int, float] | None = None,
     ) -> None:
         """Insert or update a single vector with payload."""
         ...
@@ -67,6 +68,7 @@ class VectorStoreProtocol(Protocol):
         ids: list[str],
         vectors: list[list[float]],
         payloads: list[dict[str, Any]],
+        sparse_vectors: list[dict[int, float] | None] | None = None,
     ) -> None:
         """Batch upsert for ingestion throughput."""
         ...
@@ -78,6 +80,7 @@ class VectorStoreProtocol(Protocol):
         filter: VectorFilter,
         limit: int = 10,
         score_threshold: float | None = None,
+        sparse_vector: dict[int, float] | None = None,
     ) -> list[VectorSearchResult]:
         """Filtered vector search. ALWAYS requires a team_id filter."""
         ...

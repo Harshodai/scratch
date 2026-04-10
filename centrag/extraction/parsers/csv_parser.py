@@ -13,7 +13,7 @@ import csv
 import io
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import (
     ContentType,
@@ -21,7 +21,7 @@ from centrag.abstractions.extractor import (
     ExtractorProtocol,
 )
 
-logger = structlog.get_logger("extraction.parsers.csv")
+logger = get_logger("extraction.parsers.csv")
 
 # Chunk size for streaming large CSV files (rows per batch)
 DEFAULT_CHUNK_ROWS = 1000

@@ -13,7 +13,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.observability import (
     TracingProtocol,
@@ -23,7 +23,7 @@ from centrag.observability import (
     SpanKind,
 )
 
-logger = structlog.get_logger("observability.console")
+logger = get_logger("observability.console")
 
 
 class ConsoleTracer:

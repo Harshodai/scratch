@@ -12,9 +12,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("guardrails.cost")
+logger = get_logger("guardrails.cost")
 
 
 # Budget limits per tier (tokens per day)

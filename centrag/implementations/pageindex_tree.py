@@ -37,7 +37,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.tree_index import (
     PageContent,
@@ -45,7 +45,7 @@ from centrag.abstractions.tree_index import (
     TreeIndexResult,
 )
 
-logger = structlog.get_logger("implementations.tree_index.pageindex")
+logger = get_logger("implementations.tree_index.pageindex")
 
 
 def _remove_fields(data: Any, fields: list[str]) -> Any:

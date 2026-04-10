@@ -20,11 +20,11 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.storage.document_store import DocumentStore
 
-logger = structlog.get_logger("retrieval.router")
+logger = get_logger("retrieval.router")
 
 
 class RetrievalPath(str, Enum):

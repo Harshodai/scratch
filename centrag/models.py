@@ -39,8 +39,7 @@ class Base(AsyncAttrs, DeclarativeBase):
     pass
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from centrag.utils.time import utcnow
 
 
 # =============================================================================

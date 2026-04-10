@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-import structlog
+from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import (
     ContentType,
@@ -21,7 +21,7 @@ from centrag.abstractions.extractor import (
     ExtractorProtocol,
 )
 
-logger = structlog.get_logger("extraction.parsers")
+logger = get_logger("extraction.parsers")
 
 
 class ParserRegistry:

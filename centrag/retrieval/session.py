@@ -22,9 +22,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("retrieval.session")
+logger = get_logger("retrieval.session")
 
 
 class MessageRole(str, Enum):

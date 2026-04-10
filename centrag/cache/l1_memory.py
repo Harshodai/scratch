@@ -18,9 +18,9 @@ from cachetools import TTLCache
 
 from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
 
-import structlog
+from centrag.utils.logger import get_logger
 
-logger = structlog.get_logger("cache.l1")
+logger = get_logger("cache.l1")
 
 
 class L1InMemoryCache:
