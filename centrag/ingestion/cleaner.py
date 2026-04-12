@@ -22,16 +22,15 @@ Design Pattern: PIPELINE — each stage is a function that transforms text.
 SOLID: Single Responsibility — only cleans text. Does not parse, chunk, or embed.
 SOLID: Open/Closed — add new cleaning stages by adding functions, not modifying existing ones.
 """
+
 from __future__ import annotations
 
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any
-
-from centrag.utils.logger import get_logger
 
 from centrag.guardrails.pii import PII_PATTERNS, detect_pii, redact_pii
+from centrag.utils.logger import get_logger
 
 logger = get_logger("ingestion.cleaner")
 
@@ -46,6 +45,7 @@ class CleaningResult:
         - pii_redaction_count: total number of redactions applied
         - stages_applied: which cleaning stages ran
     """
+
     cleaned_text: str
     original_length: int
     cleaned_length: int
@@ -58,16 +58,17 @@ class CleaningResult:
 @dataclass
 class DocumentCleanerConfig:
     """Configuration for the cleaning pipeline."""
+
     # Pipeline stages (toggleable)
     normalize_unicode: bool = True
     normalize_whitespace: bool = True
     strip_headers_footers: bool = True
     redact_pii: bool = True
-    normalize_urls: bool = False       # Off by default — URLs can be informative
+    normalize_urls: bool = False  # Off by default — URLs can be informative
 
     # Header/footer detection
-    max_header_lines: int = 3          # Lines at page top to check
-    max_footer_lines: int = 3          # Lines at page bottom to check
+    max_header_lines: int = 3  # Lines at page top to check
+    max_footer_lines: int = 3  # Lines at page bottom to check
     page_number_pattern: str = r"^\s*(?:Page\s*)?\d+\s*(?:of\s*\d+)?\s*$"
 
     # Thresholds
@@ -139,9 +140,7 @@ class DocumentCleaner:
             if pii_types:
                 # Count total matches before redaction
                 pii_count = sum(
-                    len(pattern.findall(text))
-                    for pii_type, pattern in PII_PATTERNS.items()
-                    if pii_type in pii_types
+                    len(pattern.findall(text)) for pii_type, pattern in PII_PATTERNS.items() if pii_type in pii_types
                 )
                 text = redact_pii(text)
                 logger.info(
@@ -196,13 +195,16 @@ class DocumentCleaner:
 
         # Replace common Unicode quotation marks with ASCII
         replacements = {
-            "\u2018": "'", "\u2019": "'",  # Smart single quotes
-            "\u201c": '"', "\u201d": '"',  # Smart double quotes
-            "\u2013": "-", "\u2014": "-",  # En-dash, Em-dash
-            "\u2026": "...",               # Ellipsis
-            "\u00a0": " ",                 # Non-breaking space
-            "\u200b": "",                  # Zero-width space
-            "\ufeff": "",                  # BOM
+            "\u2018": "'",
+            "\u2019": "'",  # Smart single quotes
+            "\u201c": '"',
+            "\u201d": '"',  # Smart double quotes
+            "\u2013": "-",
+            "\u2014": "-",  # En-dash, Em-dash
+            "\u2026": "...",  # Ellipsis
+            "\u00a0": " ",  # Non-breaking space
+            "\u200b": "",  # Zero-width space
+            "\ufeff": "",  # BOM
         }
         for old, new in replacements.items():
             text = text.replace(old, new)
@@ -266,14 +268,12 @@ class DocumentCleaner:
                 continue
 
             # Skip very short lines that look like headers/footers
-            if (
-                len(stripped) < self._config.min_line_length_for_content
-                and stripped
-                and not stripped[-1] in ".!?:;,"
-            ):
+            if len(stripped) < self._config.min_line_length_for_content and stripped and stripped[-1] not in ".!?:;,":
                 # Only skip if it looks like a page artifact, not content
                 if stripped.isdigit() or stripped.lower() in (
-                    "confidential", "draft", "internal",
+                    "confidential",
+                    "draft",
+                    "internal",
                 ):
                     stripped_count += 1
                     continue

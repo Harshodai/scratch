@@ -7,12 +7,13 @@ Tests:
   - limit enforcement
   - temporal versioning (forget)
 """
+
 from __future__ import annotations
 
 import pytest
 
-from centrag.memory.in_memory_store import InMemoryStore
 from centrag.abstractions.memory import MemoryType
+from centrag.memory.in_memory_store import InMemoryStore
 
 
 @pytest.fixture

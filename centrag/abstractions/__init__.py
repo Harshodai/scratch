@@ -20,16 +20,17 @@ Abstractions package — The heart of SOLID in CentRAG.
 │  receives TWO separate dependencies, not one bloated interface.     │
 └─────────────────────────────────────────────────────────────────────┘
 """
-from centrag.abstractions.embedder import EmbedderProtocol
-from centrag.abstractions.vectorstore import VectorStoreProtocol
-from centrag.abstractions.llm import LLMProtocol
+
 from centrag.abstractions.cache import CacheProtocol
-from centrag.abstractions.reranker import RerankerProtocol
-from centrag.abstractions.memory import MemoryProtocol
-from centrag.abstractions.extractor import ExtractorProtocol
 from centrag.abstractions.chunker import ChunkerProtocol
+from centrag.abstractions.embedder import EmbedderProtocol
+from centrag.abstractions.extractor import ExtractorProtocol
 from centrag.abstractions.guardrail import InputRailProtocol, OutputRailProtocol
+from centrag.abstractions.llm import LLMProtocol
+from centrag.abstractions.memory import MemoryProtocol
+from centrag.abstractions.reranker import RerankerProtocol
 from centrag.abstractions.tree_index import TreeIndexProtocol  # VECTORLESS path
+from centrag.abstractions.vectorstore import VectorStoreProtocol
 
 __all__ = [
     # --- SHARED (used by both paths or engine orchestration) ---
@@ -40,12 +41,10 @@ __all__ = [
     "ChunkerProtocol",
     "InputRailProtocol",
     "OutputRailProtocol",
-
     # --- VECTOR path ---
     "EmbedderProtocol",
     "VectorStoreProtocol",
     "RerankerProtocol",
-
     # --- VECTORLESS path ---
     "TreeIndexProtocol",
 ]

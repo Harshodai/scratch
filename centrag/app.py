@@ -17,21 +17,23 @@ Design Pattern: COMPOSITION ROOT
 SOLID: Single Responsibility — app.py only wires things together.
        No business logic here. Each middleware/route is in its own file.
 """
+
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import asyncio
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from centrag.utils.logger import get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from centrag.config import get_settings, Settings
-from centrag.wiring import build_retrieval_engine, build_ingestion_service
-from centrag.storage.document_store import DocumentStore
+from centrag.config import Settings, get_settings
 from centrag.ingestion.worker import IngestionWorker, WorkerConfig
+from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
 from centrag.middleware.rate_limiter import SimpleRateLimitMiddleware
+from centrag.storage.document_store import DocumentStore
+from centrag.utils.logger import get_logger
+from centrag.wiring import build_ingestion_service, build_retrieval_engine
 
 logger = get_logger()
 
@@ -40,6 +42,7 @@ async def _init_postgres(app: FastAPI, settings: Settings):
     """Initialize PostgreSQL async engine and store on app.state."""
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
+
         app.state.db_engine = create_async_engine(
             settings.pg_dsn,
             pool_size=settings.pg_pool_max,
@@ -47,8 +50,9 @@ async def _init_postgres(app: FastAPI, settings: Settings):
         )
         logger.info("postgres_initialized", dsn_host=settings.pg_host)
     except Exception as e:
-        logger.warning("postgres_init_skipped", error=str(e),
-                       message="Running without PostgreSQL — using in-memory stores.")
+        logger.warning(
+            "postgres_init_skipped", error=str(e), message="Running without PostgreSQL — using in-memory stores."
+        )
         app.state.db_engine = None
 
 
@@ -56,14 +60,12 @@ async def _init_redis(app: FastAPI, settings: Settings):
     """Initialize Redis connection and store on app.state."""
     try:
         import redis.asyncio as aioredis
-        app.state.redis = aioredis.from_url(
-            settings.redis_url, decode_responses=True
-        )
+
+        app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         await app.state.redis.ping()
         logger.info("redis_initialized", url=settings.redis_url)
     except Exception as e:
-        logger.warning("redis_init_skipped", error=str(e),
-                       message="Running without Redis — L2 cache disabled.")
+        logger.warning("redis_init_skipped", error=str(e), message="Running without Redis — L2 cache disabled.")
         app.state.redis = None
 
 
@@ -71,14 +73,16 @@ async def _init_qdrant(app: FastAPI, settings: Settings):
     """Initialize Qdrant client and store on app.state."""
     try:
         from qdrant_client import QdrantClient
+
         app.state.qdrant = QdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
         )
         logger.info("qdrant_initialized", host=settings.qdrant_host)
     except Exception as e:
-        logger.warning("qdrant_init_skipped", error=str(e),
-                       message="Running without Qdrant — using in-memory vector store.")
+        logger.warning(
+            "qdrant_init_skipped", error=str(e), message="Running without Qdrant — using in-memory vector store."
+        )
         app.state.qdrant = None
 
 
@@ -132,6 +136,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await worker.start()
     app.state.ingestion_worker = worker
 
+    # --- Initialize MCP (Model Context Protocol) ---
+    if settings.enable_mcp:
+        try:
+            from mcp.server.fastmcp import FastMCP
+
+            mcp_server = FastMCP("CentRAG-Retriever")
+            register_rag_tools(mcp_server, app.state.retrieval_engine)
+            app.state.mcp_server = mcp_server
+            logger.info("mcp_server_initialized", name="CentRAG-Retriever")
+        except ImportError:
+            logger.warning("mcp_init_failed", error="fastmcp not installed")
+
     logger.info(
         "centrag_ready",
         host=settings.api_host,
@@ -139,6 +155,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pageindex_enabled=settings.enable_pageindex,
         data_dir=settings.data_dir,
         async_worker="running",
+        mcp_enabled=settings.enable_mcp,
     )
 
     yield  # App runs here
@@ -177,7 +194,7 @@ def create_app() -> FastAPI:
 
     # --- Middleware Stack (Chain of Responsibility) ---
     # Top middleware executes FIRST on request
-    
+
     # 1. CORS: Strict origins in production
     cors_origins = getattr(settings, "cors_origins", ["https://app.centrag.io"]) if settings.is_production else ["*"]
     app.add_middleware(
@@ -186,20 +203,18 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "x-team-id"],
     )
-    
+
     # 2. Rate Limiting (Defense in depth against DDoS)
     app.add_middleware(
-        SimpleRateLimitMiddleware,
-        max_requests=100 if settings.is_production else 1000,
-        window_seconds=60
+        SimpleRateLimitMiddleware, max_requests=100 if settings.is_production else 1000, window_seconds=60
     )
 
     # --- Routes ---
-    from centrag.routes.health import router as health_router
-    from centrag.routes.documents import router as documents_router
+    from centrag.routes.feedback import router as feedback_router
     from centrag.routes.retrieve import router as retrieve_router
 
     app.include_router(health_router)
+    app.include_router(feedback_router, prefix="/v1")
 
     # Feature Flags for Dynamic Route Inclusion
     if settings.enable_docs_routes:

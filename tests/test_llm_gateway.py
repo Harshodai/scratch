@@ -8,27 +8,27 @@ Verifies:
     - Retry with backoff
     - Budget exceeded error
 """
+
 from __future__ import annotations
 
-import asyncio
-import pytest
 import time
 
+import pytest
+
 from centrag.implementations.llm_gateway import (
-    LLMGateway,
+    BudgetExceededError,
     CircuitBreaker,
     CircuitBreakerConfig,
+    CircuitOpenError,
     CircuitState,
     CostTracker,
     LatencyMonitor,
-    CircuitOpenError,
-    BudgetExceededError,
+    LLMGateway,
 )
 from centrag.implementations.noop_llm import NoOpLLM
-from centrag.abstractions.llm import LLMResponse
-
 
 # ── Circuit Breaker ─────────────────────────────────────────────────
+
 
 class TestCircuitBreaker:
     """State machine tests for the circuit breaker."""
@@ -52,10 +52,12 @@ class TestCircuitBreaker:
         assert cb.is_call_allowed is False
 
     def test_half_open_after_recovery(self):
-        cb = CircuitBreaker(CircuitBreakerConfig(
-            failure_threshold=1,
-            recovery_timeout=0.1,  # 100ms for testing
-        ))
+        cb = CircuitBreaker(
+            CircuitBreakerConfig(
+                failure_threshold=1,
+                recovery_timeout=0.1,  # 100ms for testing
+            )
+        )
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
@@ -64,11 +66,13 @@ class TestCircuitBreaker:
         assert cb.is_call_allowed is True
 
     def test_half_open_to_closed(self):
-        cb = CircuitBreaker(CircuitBreakerConfig(
-            failure_threshold=1,
-            recovery_timeout=0.01,
-            success_threshold=2,
-        ))
+        cb = CircuitBreaker(
+            CircuitBreakerConfig(
+                failure_threshold=1,
+                recovery_timeout=0.01,
+                success_threshold=2,
+            )
+        )
         cb.record_failure()
         time.sleep(0.02)
         assert cb.state == CircuitState.HALF_OPEN
@@ -79,10 +83,12 @@ class TestCircuitBreaker:
         assert cb.state == CircuitState.CLOSED
 
     def test_half_open_to_open_on_failure(self):
-        cb = CircuitBreaker(CircuitBreakerConfig(
-            failure_threshold=1,
-            recovery_timeout=0.01,
-        ))
+        cb = CircuitBreaker(
+            CircuitBreakerConfig(
+                failure_threshold=1,
+                recovery_timeout=0.01,
+            )
+        )
         cb.record_failure()
         time.sleep(0.02)
         assert cb.state == CircuitState.HALF_OPEN
@@ -101,6 +107,7 @@ class TestCircuitBreaker:
 
 
 # ── Cost Tracker ────────────────────────────────────────────────────
+
 
 class TestCostTracker:
     """Per-team cost tracking and budget enforcement."""
@@ -153,6 +160,7 @@ class TestCostTracker:
 
 # ── Latency Monitor ────────────────────────────────────────────────
 
+
 class TestLatencyMonitor:
     """Latency histogram percentile tests."""
 
@@ -194,6 +202,7 @@ class TestLatencyMonitor:
 
 
 # ── LLM Gateway Integration ────────────────────────────────────────
+
 
 class TestLLMGateway:
     """End-to-end gateway tests with NoOpLLM."""
@@ -246,7 +255,8 @@ class TestLLMGateway:
     async def test_circuit_open_raises(self):
         llm = NoOpLLM()
         gw = LLMGateway(
-            llm, team_id="t1",
+            llm,
+            team_id="t1",
             circuit_config=CircuitBreakerConfig(failure_threshold=1),
         )
 

@@ -3,6 +3,7 @@ Health routes — no auth required.
 
 SOLID: Single Responsibility — only health checks.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter
@@ -24,8 +25,8 @@ async def ready() -> dict:
     """
     checks = {
         "postgres": "ok",  # TODO: actual DB ping
-        "redis": "ok",     # TODO: actual Redis ping
-        "qdrant": "ok",    # TODO: actual Qdrant ping
+        "redis": "ok",  # TODO: actual Redis ping
+        "qdrant": "ok",  # TODO: actual Qdrant ping
     }
     all_ok = all(v == "ok" for v in checks.values())
     return {"status": "ready" if all_ok else "degraded", "checks": checks}

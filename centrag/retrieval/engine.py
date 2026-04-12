@@ -27,13 +27,13 @@ Retrieval Engine — The core RAG pipeline.
 │  - Tool Use: retrieval engine is itself a "tool" for agents        │
 └─────────────────────────────────────────────────────────────────────┘
 """
+
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, List
-
-from centrag.utils.logger import get_logger
+import time
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 from centrag.abstractions import (
     CacheProtocol,
@@ -43,131 +43,48 @@ from centrag.abstractions import (
     RerankerProtocol,
     VectorStoreProtocol,
 )
+from centrag.abstractions.cache import CacheTier
 from centrag.abstractions.embedder import SparseEmbedderProtocol
-from centrag.abstractions.query_transformer import QueryTransformerProtocol
-from centrag.abstractions.cache import CacheResult, CacheTier
-from centrag.abstractions.llm import LLMResponse, QueryComplexity
 from centrag.abstractions.guardrail import (
     InputRailProtocol,
     OutputRailProtocol,
     RailContext,
-    GuardrailViolation,
 )
+from centrag.abstractions.retrieval import RetrievalRequest, RetrievalResponse, SourceChunk
 from centrag.abstractions.vectorstore import VectorFilter
+from centrag.config import get_settings
 from centrag.middleware import RequestContext
-import time
+from centrag.observability import (
+    CostTrackingProtocol,
+    MetricsProtocol,
+    SpanKind,
+    TracingProtocol,
+)
+from centrag.retrieval.generator import TwoPassGenerator
+from centrag.utils.logger import get_logger
 
 logger = get_logger()
 
 
 # =============================================================================
-# Request / Response DTOs (Immutable)
-# =============================================================================
-
-
-@dataclass(frozen=True)
-class RetrievalRequest:
-    """
-    Immutable retrieval request.
-
-    Supports dual-path retrieval:
-        mode="auto"      → QueryRouter decides (Day 3)
-        mode="pageindex"  → VECTORLESS path only
-        mode="vector"     → VECTOR path only
-        mode="hybrid"     → Both paths + RRF fusion (Day 3)
-        mode="rag"        → Legacy: vector search (backward compat)
-    """
-
-    query: str
-    namespace: str = "default"
-    max_results: int = 5
-    include_memory: bool = True
-    include_sources: bool = True
-    mode: str = "rag"  # "auto" | "pageindex" | "vector" | "hybrid" | "rag"
-    target_doc_id: str = ""  # Scope to a specific document (enables PageIndex)
-
-
-@dataclass(frozen=True)
-class SourceChunk:
-    """A retrieved source chunk with citation metadata."""
-
-    content: str
-    document_id: str
-    chunk_index: int
-    relevance_score: float
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class RetrievalResponse:
-    """Immutable retrieval response."""
-
-    answer: str
-    sources: list[SourceChunk]
-    cache_tier: CacheTier
-    query_complexity: QueryComplexity
-    llm_response: LLMResponse | None = None
-    memory_context: list[str] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to JSON-safe dict for cache storage."""
-        return {
-            "answer": self.answer,
-            "sources": [
-                {
-                    "content": s.content,
-                    "document_id": s.document_id,
-                    "chunk_index": s.chunk_index,
-                    "relevance_score": s.relevance_score,
-                    "metadata": s.metadata,
-                }
-                for s in self.sources
-            ],
-            "cache_tier": self.cache_tier.value,
-            "query_complexity": self.query_complexity.value,
-            "memory_context": self.memory_context,
-            "metadata": self.metadata,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "RetrievalResponse":
-        """Reconstruct from cached dict."""
-        return cls(
-            answer=data["answer"],
-            sources=[
-                SourceChunk(
-                    content=s["content"],
-                    document_id=s["document_id"],
-                    chunk_index=s["chunk_index"],
-                    relevance_score=s["relevance_score"],
-                    metadata=s.get("metadata", {}),
-                )
-                for s in data.get("sources", [])
-            ],
-            cache_tier=CacheTier(data.get("cache_tier", "MISS")),
-            query_complexity=QueryComplexity(data.get("query_complexity", "moderate")),
-            memory_context=data.get("memory_context", []),
-            metadata=data.get("metadata", {}),
-        )
-
-# =============================================================================
 # Agentic Design Patterns
 # =============================================================================
+
 
 class TokenBudgetManager:
     """
     Agentic Context Compression (Pattern 8).
     Dynamically tracks the context building window to prevent API truncation limits.
     """
+
     def __init__(self, max_budget: int = 3000):
         self.max_budget = max_budget
-        
+
     def fit_context(self, sources: list[SourceChunk]) -> list[SourceChunk]:
         fitted = []
         current_cost = 0.0
         for chunk in sources:
-            cost = len(chunk.content.split()) * 1.3 # simple estimation
+            cost = len(chunk.content.split()) * 1.3  # simple estimation
             if current_cost + cost <= self.max_budget:
                 fitted.append(chunk)
                 current_cost += cost
@@ -200,9 +117,14 @@ class RetrievalEngine:
         reranker_factory: Callable[[], RerankerProtocol],
         llm_factory: Callable[[], LLMProtocol],
         cache: CacheProtocol,
-        memory: MemoryProtocol | None = None,
+        memory: MemoryProtocol,
+        sparse_embedder_factory: Callable[[], SparseEmbedderProtocol] | None = None,
         input_rails: list[InputRailProtocol] | None = None,
         output_rails: list[OutputRailProtocol] | None = None,
+        # --- OBSERVABILITY ---
+        tracing: TracingProtocol | None = None,
+        metrics: MetricsProtocol | None = None,
+        cost_tracker: CostTrackingProtocol | None = None,
         # --- VECTORLESS path (PageIndex) ---
         pageindex_retriever: Any | None = None,
         document_store: Any | None = None,
@@ -210,9 +132,9 @@ class RetrievalEngine:
         query_router: Any | None = None,
         hybrid_retriever: Any | None = None,
         # --- QUERY TRANSFORMATION ---
-        query_transformer: QueryTransformerProtocol | None = None,
-        # --- SPARSE EMBEDDER ---
-        sparse_embedder_factory: Callable[[], SparseEmbedderProtocol] | None = None,
+        query_transformer: Any | None = None,
+        # --- TWO-PASS GENERATION ---
+        generator: TwoPassGenerator | None = None,
     ) -> None:
         # Pattern 3: Pervasive Lazy Loading
         # SDKs (boto3, transformers) only initialize when their property is first accessed.
@@ -226,6 +148,13 @@ class RetrievalEngine:
         self._input_rails = input_rails or []
         self._output_rails = output_rails or []
 
+        # Observability (Injected abstractions)
+        from centrag.observability.console import ConsoleCostTracker, ConsoleMetrics, ConsoleTracer
+
+        self._tracing = tracing or ConsoleTracer()
+        self._metrics = metrics or ConsoleMetrics()
+        self._cost_tracker = cost_tracker or ConsoleCostTracker()
+
         # VECTORLESS path components
         self._pageindex_retriever = pageindex_retriever
         self._document_store = document_store
@@ -234,6 +163,7 @@ class RetrievalEngine:
         self._query_router = query_router
         self._hybrid_retriever = hybrid_retriever
         self._query_transformer = query_transformer
+        self._generator = generator
 
         self.__embedder = None
         self.__vectorstore = None
@@ -245,9 +175,10 @@ class RetrievalEngine:
 
     @property
     def _embedder(self) -> EmbedderProtocol:
-        if not self.__embedder: self.__embedder = self._embedder_factory()
+        if not self.__embedder:
+            self.__embedder = self._embedder_factory()
         return self.__embedder
-        
+
     @property
     def _sparse_embedder(self) -> SparseEmbedderProtocol | None:
         if self._sparse_embedder_instance is None:
@@ -256,17 +187,20 @@ class RetrievalEngine:
 
     @property
     def _vectorstore(self) -> VectorStoreProtocol:
-        if not self.__vectorstore: self.__vectorstore = self._vectorstore_factory()
+        if not self.__vectorstore:
+            self.__vectorstore = self._vectorstore_factory()
         return self.__vectorstore
-        
+
     @property
     def _reranker(self) -> RerankerProtocol:
-        if not self.__reranker: self.__reranker = self._reranker_factory()
+        if not self.__reranker:
+            self.__reranker = self._reranker_factory()
         return self.__reranker
-        
+
     @property
     def _llm(self) -> LLMProtocol:
-        if not self.__llm: self.__llm = self._llm_factory()
+        if not self.__llm:
+            self.__llm = self._llm_factory()
         return self.__llm
 
     async def retrieve(
@@ -275,22 +209,21 @@ class RetrievalEngine:
         ctx: RequestContext,
     ) -> RetrievalResponse:
         """
-        Main retrieval pipeline.
-
-        Flow (Chain of Responsibility):
-        0. GUARDRAILS: Validate input query (schema, pii, prompt injection)
-        1. ADAPTIVE: Classify query complexity
-        2. CACHE: Check tiered cache (L1 → L2 → L3)
-        3. RETRIEVE: Dense vector search (+ sparse BM25 in future)
-        4. RERANK: Score chunks by relevance
-        5. VALIDATE (CRAG): Check confidence — rewrite if too low
-        6. MEMORY: Inject relevant memories into context
         7. GENERATE: LLM produces answer with citations
         8. GUARDRAILS: Validate response, redact PII
         9. REPORT: Audit trail with latency + cost tracking
         10. CACHE WRITE: Store result for future queries
         """
-        start_time = time.monotonic()
+        async with self._tracing.span("centrag.retrieve", SpanKind.RETRIEVAL) as span:
+            span.attributes.update(
+                {
+                    "team_id": ctx.team_id,
+                    "request_mode": request.mode,
+                    "namespace": request.namespace,
+                }
+            )
+
+            start_time = time.monotonic()
         log = logger.bind(
             team_id=ctx.team_id,
             request_id=ctx.request_id,
@@ -394,16 +327,16 @@ class RetrievalEngine:
                 retrieval_source = "vector" if not use_pageindex else retrieval_source
 
                 query_embedding = await self._embedder.embed_query(sanitized_query)
-                sparse_vector = await self._sparse_embedder.embed_sparse(sanitized_query) if self._sparse_embedder else None
+                sparse_vector = (
+                    await self._sparse_embedder.embed_sparse(sanitized_query) if self._sparse_embedder else None
+                )
                 embed_token_estimate = len(sanitized_query.split()) * 2
                 # Ensure team-isolation is ALWAYS the baseline filter before merging LLM extractions
                 search_filter = VectorFilter.for_team(ctx.team_id)
                 if query_filter:
                     search_filter.must.extend(query_filter.must)
                     search_filter.must_not.extend(query_filter.must_not)
-                search_filter = search_filter.with_condition(
-                    "namespace", request.namespace
-                )
+                search_filter = search_filter.with_condition("namespace", request.namespace)
                 raw_results = await self._vectorstore.search(
                     collection="documents",
                     vector=query_embedding,
@@ -436,14 +369,21 @@ class RetrievalEngine:
                 fallback_reranked = None
 
                 if not confident_chunks and self._query_transformer:
-                    log.warning("crag_low_confidence", message="Advisor intercepting bad context. Triggering CRAG rewrite fallback.")
-                    intent = await self._query_transformer.transform(f"Abstract synonym generation for: {sanitized_query}", ctx.team_id)
+                    log.warning(
+                        "crag_low_confidence",
+                        message="Advisor intercepting bad context. Triggering CRAG rewrite fallback.",
+                    )
+                    intent = await self._query_transformer.transform(
+                        f"Abstract synonym generation for: {sanitized_query}", ctx.team_id
+                    )
                     fallback_query = " ".join(intent.expansions) if intent.expansions else intent.optimized_query
-                    
+
                     fallback_embedding = await self._embedder.embed_query(fallback_query)
-                    fallback_sparse = await self._sparse_embedder.embed_sparse(fallback_query) if self._sparse_embedder else None
+                    fallback_sparse = (
+                        await self._sparse_embedder.embed_sparse(fallback_query) if self._sparse_embedder else None
+                    )
                     embed_token_estimate += len(fallback_query.split()) * 2
-                    
+
                     fallback_results = await self._vectorstore.search(
                         collection="documents",
                         vector=fallback_embedding,
@@ -451,7 +391,7 @@ class RetrievalEngine:
                         limit=request.max_results,
                         sparse_vector=fallback_sparse,
                     )
-                    
+
                     if fallback_results:
                         fallback_reranked = await self._reranker.rerank(
                             query=request.query,
@@ -464,7 +404,10 @@ class RetrievalEngine:
                         log.info("crag_fallback_complete", recovered_chunks=len(confident_chunks))
 
                 if not confident_chunks:
-                    log.warning("crag_fallback_failed", message="No confident context available even after rewrite. Returning top 3.")
+                    log.warning(
+                        "crag_fallback_failed",
+                        message="No confident context available even after rewrite. Returning top 3.",
+                    )
                     if crag_retried and fallback_reranked is not None:
                         confident_chunks = fallback_reranked[:3]
                     else:
@@ -480,6 +423,13 @@ class RetrievalEngine:
                     )
                     for chunk in confident_chunks
                 ]
+
+            # --- Step 5.5: Contextual Compression (LLM-based refinement) ---
+            settings = get_settings()
+            if settings.enable_contextual_compression and sources:
+                log.info("compressing_context", source_count=len(sources))
+                sources = await self._compress_context(request.query, sources)
+                log.info("compression_complete", source_count=len(sources))
 
             # --- Step 6: Memory context ---
             memory_context: list[str] = []
@@ -538,27 +488,63 @@ class RetrievalEngine:
             )
 
             return response
-        
+
         except asyncio.CancelledError:
             # Pattern 7: Hierarchical Request Cancellation
             # Explicitly halt expensive vector/LLM GPU operations if the client aborts.
             logger.warning("request_cancelled_by_client", request_id=ctx.request_id)
             raise
-        
+
         except Exception as e:
             error_msg = str(e)
             raise e
-            
+
         finally:
             # --- Step 9: Audit Trail ---
             latency_ms = (time.monotonic() - start_time) * 1000
             log.info(
                 "retrieval_complete",
                 latency_ms=round(latency_ms, 2),
-                source_count=len(sources) if 'sources' in locals() else 0,
+                source_count=len(sources) if "sources" in locals() else 0,
                 success=(error_msg is None),
                 error=error_msg,
             )
+
+    async def _compress_context(self, query: str, sources: list[SourceChunk]) -> list[SourceChunk]:
+        """
+        Use the LLM to extract only relevant fragments from retrieved chunks
+        relative to the query.
+        """
+        compressed_sources = []
+        # In production, this would be parallelized
+        for chunk in sources:
+            prompt = f"""
+            You are a helpful assistant that compresses text for a RAG system.
+            
+            Query: {query}
+            
+            Chunk Content:
+            {chunk.content}
+            
+            Task:
+            Review the chunk content above. Extract only the sentences that are directly relevant 
+            to answering the query. If the entire chunk is relevant, return it as is. 
+            If none of it is relevant, respond with "NO_RELEVANT_CONTENT".
+            Respond only with the compressed text or "NO_RELEVANT_CONTENT".
+            """
+
+            try:
+                resp = await self._llm.generate(prompt, context=[chunk.content])
+                content = resp.content.strip()
+                if content != "NO_RELEVANT_CONTENT":
+                    from dataclasses import replace
+
+                    compressed_sources.append(replace(chunk, content=content))
+            except Exception as e:
+                logger.warning("compression_failed_for_chunk", error=str(e))
+                compressed_sources.append(chunk)
+
+        return compressed_sources
 
     async def retrieve_stream(
         self,
@@ -566,16 +552,14 @@ class RetrievalEngine:
         ctx: RequestContext,
     ) -> AsyncIterator[str]:
         """
-        Streaming retrieval — retrieve context first, then stream LLM generation.
+        Streaming retrieval -- retrieve context first, then stream LLM generation.
         Yields response tokens chunk by chunk, reducing time-to-first-byte.
         """
         try:
             # Retrieve context (same as non-streaming pipeline)
             query_embedding = await self._embedder.embed_query(request.query)
 
-            vf = VectorFilter(
-                must=[{"key": "team_id", "match": {"value": ctx.team_id}}]
-            )
+            vf = VectorFilter(must=[{"key": "team_id", "match": {"value": ctx.team_id}}])
             search_results = await self._vectorstore.search(
                 collection=request.namespace,
                 vector=query_embedding,
@@ -583,9 +567,7 @@ class RetrievalEngine:
                 limit=request.max_results,
             )
 
-            context_texts = [
-                r.payload.get("content", "") for r in search_results if r.payload
-            ]
+            context_texts = [r.payload.get("content", "") for r in search_results if r.payload]
 
             if not context_texts:
                 yield "No relevant documents found for your query."
@@ -593,9 +575,7 @@ class RetrievalEngine:
 
             # Stream from LLM if supported
             if hasattr(self._llm, "generate_stream"):
-                async for chunk in self._llm.generate_stream(
-                    prompt=request.query, context=context_texts
-                ):
+                async for chunk in self._llm.generate_stream(prompt=request.query, context=context_texts):
                     yield chunk
             else:
                 # Fallback to non-streaming

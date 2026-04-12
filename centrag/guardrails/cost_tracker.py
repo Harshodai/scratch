@@ -6,6 +6,7 @@ This provides a working in-memory implementation for development/testing.
 
 Uses the BUDGET_LIMITS dict that was previously declared but never referenced.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -20,28 +21,25 @@ logger = get_logger("guardrails.cost")
 # Budget limits per tier (tokens per day)
 # Previously declared in guardrails.py L268-272 but never used.
 BUDGET_LIMITS: dict[str, int] = {
-    "free": 50_000,          # ~$0.15/day
-    "standard": 200_000,     # ~$0.60/day
-    "pro": 500_000,          # ~$1.50/day
-    "premium": 2_000_000,    # ~$6.00/day
-    "enterprise": 5_000_000, # ~$15/day
+    "free": 50_000,  # ~$0.15/day
+    "standard": 200_000,  # ~$0.60/day
+    "pro": 500_000,  # ~$1.50/day
+    "premium": 2_000_000,  # ~$6.00/day
+    "enterprise": 5_000_000,  # ~$15/day
 }
 
 
 @dataclass
 class TokenUsage:
     """Tracks token usage for a single request."""
+
     embedding_tokens: int = 0
     generation_input_tokens: int = 0
     generation_output_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
-        return (
-            self.embedding_tokens
-            + self.generation_input_tokens
-            + self.generation_output_tokens
-        )
+        return self.embedding_tokens + self.generation_input_tokens + self.generation_output_tokens
 
     @property
     def estimated_cost_usd(self) -> float:

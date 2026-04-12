@@ -9,6 +9,7 @@ Best for technical documents with clear heading structures
 
 Design: STRATEGY PATTERN leaf — implements ChunkerProtocol.
 """
+
 from __future__ import annotations
 
 import re
@@ -17,7 +18,6 @@ from centrag.abstractions.chunker import (
     ChunkingConfig,
     ChunkingStrategy,
     ChunkResult,
-    ChunkerProtocol,
 )
 
 
@@ -78,9 +78,7 @@ class StructureAwareChunker:
 
             if len(words) > max_words:
                 # Too large — split into sub-chunks
-                sub_chunks = self._split_large_section(
-                    section_text, max_words, int(cfg.chunk_overlap * 0.75)
-                )
+                sub_chunks = self._split_large_section(section_text, max_words, int(cfg.chunk_overlap * 0.75))
                 for sub_chunk in sub_chunks:
                     chunk_text = self._enrich(sub_chunk, document_title, header_chain, cfg)
                     start_char = text.find(sub_chunk[:50])
@@ -124,9 +122,9 @@ class StructureAwareChunker:
 
         Detects markdown headers (# ## ###) and numbered headers (1. 1.1 1.1.1).
         """
-        header_pattern = re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE)
+        header_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 
-        lines = text.split('\n')
+        lines = text.split("\n")
         sections: list[tuple[list[str], str]] = []
         current_headers: list[str] = []
         current_content: list[str] = []
@@ -136,7 +134,7 @@ class StructureAwareChunker:
             if match:
                 # Flush current content
                 if current_content:
-                    content = '\n'.join(current_content).strip()
+                    content = "\n".join(current_content).strip()
                     if content:
                         sections.append((list(current_headers), content))
                     current_content = []
@@ -145,14 +143,14 @@ class StructureAwareChunker:
                 level = len(match.group(1))
                 header_text = match.group(2).strip()
                 # Trim header chain to current level
-                current_headers = current_headers[:level - 1]
+                current_headers = current_headers[: level - 1]
                 current_headers.append(header_text)
             else:
                 current_content.append(line)
 
         # Flush remaining content
         if current_content:
-            content = '\n'.join(current_content).strip()
+            content = "\n".join(current_content).strip()
             if content:
                 sections.append((list(current_headers), content))
 
@@ -162,11 +160,9 @@ class StructureAwareChunker:
 
         return sections
 
-    def _split_large_section(
-        self, text: str, max_words: int, overlap_words: int
-    ) -> list[str]:
+    def _split_large_section(self, text: str, max_words: int, overlap_words: int) -> list[str]:
         """Split a large section by paragraph, then by sentence if needed."""
-        paragraphs = text.split('\n\n')
+        paragraphs = text.split("\n\n")
         chunks: list[str] = []
         current: list[str] = []
         current_size = 0
@@ -174,14 +170,14 @@ class StructureAwareChunker:
         for para in paragraphs:
             para_words = len(para.split())
             if current_size + para_words > max_words and current:
-                chunks.append('\n\n'.join(current))
+                chunks.append("\n\n".join(current))
                 current = []
                 current_size = 0
             current.append(para)
             current_size += para_words
 
         if current:
-            chunks.append('\n\n'.join(current))
+            chunks.append("\n\n".join(current))
 
         return chunks
 

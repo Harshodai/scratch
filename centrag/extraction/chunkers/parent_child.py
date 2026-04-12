@@ -14,24 +14,21 @@ Why this pattern?
 Design Pattern: STRATEGY — implements ChunkerProtocol.
 SOLID: Open/Closed — new chunking strategy, no existing code modified.
 """
+
 from __future__ import annotations
 
 import hashlib
-import uuid
-from typing import Any
 
 from centrag.abstractions.chunker import (
     ChunkingConfig,
     ChunkingStrategy,
     ChunkResult,
-    ChunkerProtocol,
 )
 
-
 # Parent: ~512 tokens (~384 words), Child: ~128 tokens (~96 words)
-DEFAULT_PARENT_SIZE = 384    # words (approximation for tokens)
-DEFAULT_CHILD_SIZE = 96      # words
-DEFAULT_CHILD_OVERLAP = 16   # words overlap between child chunks
+DEFAULT_PARENT_SIZE = 384  # words (approximation for tokens)
+DEFAULT_CHILD_SIZE = 96  # words
+DEFAULT_CHILD_OVERLAP = 16  # words overlap between child chunks
 
 
 class ParentChildChunker:
@@ -85,7 +82,9 @@ class ParentChildChunker:
         Use chunk_with_parents() to get both parent and child chunks.
         """
         _, children = self.chunk_with_parents(
-            text, doc_id="", document_title=document_title,
+            text,
+            doc_id="",
+            document_title=document_title,
             section_headers=section_headers,
         )
         return children

@@ -20,6 +20,7 @@ Design Standards:
   - Tools MUST respect team_id for multi-tenant isolation
   - Tool descriptions MUST be LLM-friendly (clear, unambiguous)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -78,8 +79,8 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
               - query_complexity: str — "simple" | "moderate" | "complex"
               - cache_tier: str — Which cache served (L1/L2/L3/MISS)
         """
-        from centrag.retrieval.engine import RetrievalRequest
         from centrag.middleware import RequestContext
+        from centrag.retrieval.engine import RetrievalRequest
 
         ctx = RequestContext(
             team_id=team_id,
@@ -166,7 +167,8 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
                     "chunk_index": r.payload.get("chunk_index", 0),
                     "relevance_score": round(r.score, 3),
                     "metadata": {
-                        k: v for k, v in r.payload.items()
+                        k: v
+                        for k, v in r.payload.items()
                         if k not in ("content", "document_id", "chunk_index", "team_id")
                     },
                 }

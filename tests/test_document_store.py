@@ -8,15 +8,15 @@ Verifies:
     - Team isolation (directory scoping)
     - Page range parsing
 """
+
 from __future__ import annotations
 
-import json
-import pytest
 import shutil
 import tempfile
-from pathlib import Path
 
-from centrag.storage.document_store import DocumentStore, DocumentMeta
+import pytest
+
+from centrag.storage.document_store import DocumentStore
 
 
 @pytest.fixture
@@ -29,6 +29,7 @@ def tmp_store():
 
 
 # ── Document Lifecycle ──────────────────────────────────────────────
+
 
 class TestDocumentLifecycle:
     """Tests for core document CRUD operations (shared by both paths)."""
@@ -134,6 +135,7 @@ class TestDocumentLifecycle:
 
 # ── VECTORLESS Path Artifacts ───────────────────────────────────────
 
+
 class TestPageIndexArtifacts:
     """Tests for VECTORLESS path (PageIndex tree and page cache)."""
 
@@ -218,10 +220,7 @@ class TestPageIndexArtifacts:
             team_id="team-1",
             doc_id=meta.doc_id,
             tree_json={},
-            page_cache=[
-                {"page": i, "content": f"Page {i}"}
-                for i in range(1, 11)
-            ],
+            page_cache=[{"page": i, "content": f"Page {i}"} for i in range(1, 11)],
         )
 
         pages = await tmp_store.get_page_content("team-1", meta.doc_id, "3-5, 8")
@@ -236,6 +235,7 @@ class TestPageIndexArtifacts:
 
 
 # ── VECTOR Path Artifacts ───────────────────────────────────────────
+
 
 class TestVectorArtifacts:
     """Tests for VECTOR path (chunks). Placeholder for Day 3."""
@@ -264,18 +264,23 @@ class TestVectorArtifacts:
 
 # ── List & Multi-tenant ────────────────────────────────────────────
 
+
 class TestListAndMultiTenant:
     """Tests for listing and team isolation."""
 
     async def test_list_documents_by_team(self, tmp_store: DocumentStore):
         """Each team sees only their own documents."""
         await tmp_store.store_document(
-            team_id="team-1", filename="t1-doc.pdf",
-            content_type="application/pdf", cleaned_text="T1.",
+            team_id="team-1",
+            filename="t1-doc.pdf",
+            content_type="application/pdf",
+            cleaned_text="T1.",
         )
         await tmp_store.store_document(
-            team_id="team-2", filename="t2-doc.pdf",
-            content_type="application/pdf", cleaned_text="T2.",
+            team_id="team-2",
+            filename="t2-doc.pdf",
+            content_type="application/pdf",
+            cleaned_text="T2.",
         )
 
         t1_docs = await tmp_store.list_documents("team-1")
@@ -289,13 +294,17 @@ class TestListAndMultiTenant:
     async def test_list_documents_by_namespace(self, tmp_store: DocumentStore):
         """Filter documents by namespace."""
         await tmp_store.store_document(
-            team_id="team-1", filename="finance.pdf",
-            content_type="application/pdf", cleaned_text="F.",
+            team_id="team-1",
+            filename="finance.pdf",
+            content_type="application/pdf",
+            cleaned_text="F.",
             namespace="finance",
         )
         await tmp_store.store_document(
-            team_id="team-1", filename="legal.pdf",
-            content_type="application/pdf", cleaned_text="L.",
+            team_id="team-1",
+            filename="legal.pdf",
+            content_type="application/pdf",
+            cleaned_text="L.",
             namespace="legal",
         )
 
@@ -305,6 +314,7 @@ class TestListAndMultiTenant:
 
 
 # ── Page Parsing ────────────────────────────────────────────────────
+
 
 class TestPageParsing:
     """Tests for the _parse_pages utility."""
@@ -326,6 +336,7 @@ class TestPageParsing:
 
 
 # ── TreeNode Serialization ──────────────────────────────────────────
+
 
 class TestTreeNodeSerialization:
     """Tests for TreeNode dataclass (VECTORLESS path)."""

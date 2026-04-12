@@ -28,22 +28,20 @@ Design Pattern: ADAPTER — adapts PageIndex's API to CentRAG's TreeIndexProtoco
 SOLID: Single Responsibility — only builds trees. Does not retrieve, chunk, or embed.
 SOLID: Liskov Substitution — any TreeIndexProtocol implementation can replace this.
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
 from centrag.abstractions.tree_index import (
     PageContent,
-    TreeIndexProtocol,
     TreeIndexResult,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.tree_index.pageindex")
 
@@ -51,11 +49,7 @@ logger = get_logger("implementations.tree_index.pageindex")
 def _remove_fields(data: Any, fields: list[str]) -> Any:
     """Recursively remove specified fields from a nested dict/list structure."""
     if isinstance(data, dict):
-        return {
-            k: _remove_fields(v, fields)
-            for k, v in data.items()
-            if k not in fields
-        }
+        return {k: _remove_fields(v, fields) for k, v in data.items() if k not in fields}
     if isinstance(data, list):
         return [_remove_fields(item, fields) for item in data]
     return data
@@ -163,13 +157,10 @@ class PageIndexTreeBuilder:
     async def _build_from_pdf(self, file_path: str) -> TreeIndexResult:
         """Build tree from PDF using PageIndex's native PDF processing."""
         try:
-            from pageindex import page_index
             import PyPDF2
+            from pageindex import page_index
         except ImportError as e:
-            raise ImportError(
-                "PageIndex dependencies not installed. "
-                "Run: pip install litellm pymupdf PyPDF2"
-            ) from e
+            raise ImportError("PageIndex dependencies not installed. Run: pip install litellm pymupdf PyPDF2") from e
 
         # Run PageIndex (CPU + LLM-bound, run in executor)
         loop = asyncio.get_event_loop()
@@ -217,10 +208,7 @@ class PageIndexTreeBuilder:
         try:
             from pageindex.page_index_md import md_to_tree
         except ImportError as e:
-            raise ImportError(
-                "PageIndex dependencies not installed. "
-                "Run: pip install litellm pymupdf PyPDF2"
-            ) from e
+            raise ImportError("PageIndex dependencies not installed. Run: pip install litellm pymupdf PyPDF2") from e
 
         result = await md_to_tree(
             md_path=file_path,
@@ -255,9 +243,7 @@ class PageIndexTreeBuilder:
             model_used=self._model,
         )
 
-    async def _build_from_text(
-        self, file_path: str, content_type: str
-    ) -> TreeIndexResult:
+    async def _build_from_text(self, file_path: str, content_type: str) -> TreeIndexResult:
         """
         Build tree from non-PDF/non-Markdown content.
 
@@ -268,9 +254,7 @@ class PageIndexTreeBuilder:
         content = Path(file_path).read_text(encoding="utf-8")
 
         # Write to temp markdown file
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
@@ -312,11 +296,7 @@ class PageIndexTreeBuilder:
         page_nums = _parse_pages(pages)
         page_map = {p["page"]: p["content"] for p in page_cache}
 
-        return [
-            PageContent(page=p, content=page_map[p])
-            for p in page_nums
-            if p in page_map
-        ]
+        return [PageContent(page=p, content=page_map[p]) for p in page_nums if p in page_map]
 
     @staticmethod
     def _extract_md_page_cache(tree: Any) -> list[dict[str, Any]]:

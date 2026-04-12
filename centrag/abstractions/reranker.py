@@ -13,6 +13,7 @@ RAG Advancement: CORRECTIVE RAG (CRAG) — 2025
       signal so the pipeline can trigger corrective actions (rewrite query,
       try different data source, escalate to human).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,7 +24,7 @@ from typing import Protocol, runtime_checkable
 class RerankResult:
     """Reranked chunk with relevance score."""
 
-    index: int              # Original position in the input list
+    index: int  # Original position in the input list
     text: str
     relevance_score: float  # 0.0 to 1.0
 

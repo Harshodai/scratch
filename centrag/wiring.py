@@ -29,63 +29,83 @@ Usage:
     engine = components["retrieval_engine"]
     ingestion = components["ingestion_service"]
 """
+
 from __future__ import annotations
 
-from centrag.utils.logger import get_logger
-
-from centrag.config import Settings
-
-# --- Shared infrastructure ---
-from centrag.storage.document_store import DocumentStore
-from centrag.retrieval.engine import RetrievalEngine
-from centrag.retrieval.query_router import QueryRouter
-from centrag.retrieval.hybrid import HybridRetriever
-
-# --- VECTOR path implementations (similarity-based) ---
-from centrag.implementations.noop_embedder import NoOpEmbedder
-from centrag.implementations.noop_vectorstore import NoOpVectorStore
-from centrag.implementations.noop_reranker import NoOpReranker
-from centrag.implementations.bm25_sparse_embedder import BM25SparseEmbedder
-from centrag.implementations.llm_query_extractor import LLMQueryExtractor
-from centrag.implementations.hyde_transformer import HyDETransformer
-
-# --- VECTORLESS path implementations (reasoning-based) ---
-from centrag.implementations.pageindex_tree import PageIndexTreeBuilder
-from centrag.retrieval.pageindex_retriever import PageIndexRetriever
-
-# --- Shared implementations ---
-from centrag.implementations.noop_llm import NoOpLLM
+from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy
 from centrag.cache.l1_memory import L1InMemoryCache
 from centrag.cache.l2_redis import L2RedisCache
 from centrag.cache.orchestrator import TieredCacheOrchestrator
-from centrag.memory.in_memory_store import InMemoryStore
+from centrag.config import Settings
+from centrag.extraction.chunkers.proposition import PropositionChunker
+from centrag.extraction.parsers.base import ParserRegistry
+from centrag.extraction.pipeline import ExtractionPipeline
 from centrag.guardrails.engine import GuardrailEngine, GuardrailsConfig
+from centrag.implementations.bedrock_embedder import BedrockEmbedder
+from centrag.implementations.bm25_sparse_embedder import BM25SparseEmbedder
+from centrag.implementations.hyde_transformer import HyDETransformer
+from centrag.implementations.llm_query_extractor import LLMQueryExtractor
+
+# --- VECTOR path implementations (similarity-based) ---
+from centrag.implementations.noop_embedder import NoOpEmbedder
+
+# --- Shared implementations ---
+from centrag.implementations.noop_llm import NoOpLLM
+from centrag.implementations.noop_reranker import NoOpReranker
+from centrag.implementations.noop_vectorstore import NoOpVectorStore
+from centrag.implementations.openai_embedder import OpenAIEmbedder
+
+# --- VECTORLESS path implementations (reasoning-based) ---
+from centrag.implementations.pageindex_tree import PageIndexTreeBuilder
+from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
 
 # --- Ingestion (feeds both paths) ---
 from centrag.ingestion.service import IngestionService
-from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
-from centrag.extraction.pipeline import ExtractionPipeline
-from centrag.extraction.parsers.base import ParserRegistry
+from centrag.memory.in_memory_store import InMemoryStore
+from centrag.retrieval.engine import RetrievalEngine
+from centrag.retrieval.hybrid import HybridRetriever
+from centrag.retrieval.pageindex_retriever import PageIndexRetriever
+from centrag.retrieval.query_router import QueryRouter
+
+# --- Shared infrastructure ---
+from centrag.storage.document_store import DocumentStore
+from centrag.utils.logger import get_logger
 
 logger = get_logger("wiring")
 
 
 def _build_vector_components(settings: Settings):
-    """
-    Build VECTOR path components conditionally.
+    """Internal helper to select embedder and vectorstore."""
+    # Provider strategy: "bedrock", "openai", "noop"
+    if settings.embedder_provider == "bedrock":
 
-    Returns:
-        (embedder_factory, vectorstore_factory, embedder_name, store_name)
-    """
+        def embedder_factory():
+            return BedrockEmbedder(model=settings.bedrock_embed_model, region=settings.aws_region)
+
+        emb_name = "BedrockEmbedder"
+    elif settings.embedder_provider == "openai":
+
+        def embedder_factory():
+            return OpenAIEmbedder()
+
+        emb_name = "OpenAIEmbedder"
+    else:
+
+        def embedder_factory():
+            return NoOpEmbedder(dimension=1024)
+
+        emb_name = "NoOpEmbedder"
+
     if settings.enable_vector:
         try:
             from centrag.implementations.qdrant_vectorstore import QdrantVectorStore
 
             qdrant_store = QdrantVectorStore(
-                url=settings.qdrant_url,
+                url=settings.qdrant_url if not settings.qdrant_local_path else None,
                 api_key=settings.qdrant_api_key or None,
                 collection_name=settings.qdrant_collection,
                 dimension=1024,
+                path=settings.qdrant_local_path or None,
             )
 
             logger.info(
@@ -95,24 +115,55 @@ def _build_vector_components(settings: Settings):
             )
 
             return (
-                lambda: NoOpEmbedder(dimension=1024),  # Day 4: OpenAI/Bedrock
+                embedder_factory,
                 lambda: qdrant_store,
-                "NoOpEmbedder",
+                emb_name,
                 "QdrantVectorStore",
             )
         except ImportError:
             logger.warning(
                 "qdrant_client_not_installed",
-                message="Falling back to NoOp. pip install qdrant-client",
+                message="Falling back to NoOp VectorStore. pip install qdrant-client",
             )
 
-    # Fallback: NoOp implementations
+    # Fallback: NoOp VectorStore
     return (
-        lambda: NoOpEmbedder(dimension=1024),
+        embedder_factory,
         NoOpVectorStore,
-        "NoOpEmbedder",
+        emb_name,
         "NoOpVectorStore",
     )
+
+
+def _build_llm_factory(settings: Settings):
+    """Factory for selecting production or dev LLM provider."""
+    if settings.llm_provider == "bedrock":
+        try:
+            from centrag.implementations.bedrock_llm import BedrockLLM
+
+            def llm_factory():
+                return BedrockLLM(model=settings.bedrock_llm_model, region=settings.aws_region)
+
+            return llm_factory, "BedrockLLM"
+        except ImportError:
+            logger.warning("bedrock_not_installed", message="pip install boto3")
+
+    elif settings.llm_provider == "openai":
+        try:
+            from centrag.implementations.openai_llm import OpenAILLM
+
+            def llm_factory():
+                return OpenAILLM(api_key=settings.openai_api_key)
+
+            return llm_factory, "OpenAILLM"
+        except ImportError:
+            logger.warning("openai_not_installed", message="pip install openai")
+
+    # Default/Fallback
+    def llm_factory():
+        return NoOpLLM(model_name="noop-llm-v1")
+
+    return llm_factory, "NoOpLLM"
 
 
 def build_retrieval_engine(
@@ -146,6 +197,24 @@ def build_retrieval_engine(
     # --- Memory: In-memory for dev ---
     memory = InMemoryStore()
 
+    # --- Observability ---
+    tracing = None
+    metrics = None
+    if settings.observability_provider == "otel":
+        from centrag.observability.otel_provider import OTelMetrics, OTelTracer
+
+        tracing = OTelTracer(service_name="centrag")
+        metrics = OTelMetrics(service_name="centrag")
+    else:
+        from centrag.observability.console import ConsoleMetrics, ConsoleTracer
+
+        tracing = ConsoleTracer()
+        metrics = ConsoleMetrics()
+
+    from centrag.observability.console import ConsoleCostTracker
+
+    cost_tracker = ConsoleCostTracker()
+
     # --- Guardrails ---
     guardrail_engine = GuardrailEngine(GuardrailsConfig())
 
@@ -170,9 +239,12 @@ def build_retrieval_engine(
     query_router = QueryRouter(document_store=document_store)
     hybrid_retriever = HybridRetriever(k=60)
 
+    # --- LLM Selection ---
+    llm_factory, llm_name = _build_llm_factory(settings)
+
     # --- QUERY TRANSFORMATION & SPARSE EMBEDDING ---
     # Strategy pattern: select transformer based on config
-    llm_for_transform = NoOpLLM(model_name="noop-llm-transformer")
+    llm_for_transform = llm_factory()
     if settings.query_transformer_strategy == "hyde":
         query_transformer = HyDETransformer(llm=llm_for_transform)
         logger.info("using_hyde_transformer")
@@ -180,14 +252,22 @@ def build_retrieval_engine(
         query_transformer = LLMQueryExtractor(llm=llm_for_transform)
         logger.info("using_llm_extractor_transformer")
 
+    # --- REASONING GENERATOR (Two-Pass) ---
+    from centrag.retrieval.generator import TwoPassGenerator
+
+    generator = TwoPassGenerator(llm=None, cache=cache)  # LLM injected lazily by engine
+
     # --- Build the engine ---
     engine = RetrievalEngine(
         embedder_factory=embedder_factory,
         vectorstore_factory=vectorstore_factory,
         reranker_factory=NoOpReranker,
-        llm_factory=lambda: NoOpLLM(model_name="noop-llm-v1"),
+        llm_factory=llm_factory,
         cache=cache,
         memory=memory,
+        tracing=tracing,
+        metrics=metrics,
+        cost_tracker=cost_tracker,
         input_rails=guardrail_engine.input_rails,
         output_rails=guardrail_engine.output_rails,
         pageindex_retriever=pageindex_retriever,
@@ -196,6 +276,7 @@ def build_retrieval_engine(
         hybrid_retriever=hybrid_retriever,
         query_transformer=query_transformer,
         sparse_embedder_factory=lambda: BM25SparseEmbedder() if settings.enable_vector else None,
+        generator=generator,  # TWO-PASS GENERATOR
     )
 
     # Wire LLM into PageIndex retriever (same lazy instance)
@@ -234,27 +315,55 @@ def build_ingestion_service(
     if document_store is None:
         document_store = DocumentStore(base_path=settings.data_dir)
 
+    # --- LLM Selection ---
+    llm_factory, llm_name = _build_llm_factory(settings)
+
     # --- Parser registry (existing parsers) ---
     registry = ParserRegistry()
     try:
         from centrag.extraction.parsers.pdf import PDFParser
+
         registry.register(PDFParser())
     except ImportError:
         logger.warning("pdf_parser_unavailable")
 
     try:
         from centrag.extraction.parsers.text import (
-            PlainTextParser,
-            MarkdownParser,
             HTMLParser,
+            MarkdownParser,
+            PlainTextParser,
         )
+
         registry.register(PlainTextParser())
         registry.register(MarkdownParser())
         registry.register(HTMLParser())
     except ImportError:
         logger.warning("text_parsers_unavailable")
 
-    pipeline = ExtractionPipeline(parser_registry=registry)
+    # --- High-Fidelity Extraction (LlamaParse) ---
+    try:
+        from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
+
+        llamaparse = LlamaParseExtractor(api_key=settings.llama_cloud_api_key)
+        registry.register(llamaparse)
+        logger.info("llamaparse_wired")
+    except (ImportError, ValueError) as e:
+        logger.warning("llamaparse_unavailable", error=str(e))
+
+    # --- Extraction Pipeline with LLM support (Anthropic 2024 Contextual Retrieval) ---
+    pipeline = ExtractionPipeline(
+        parser_registry=registry,
+        default_chunking=ChunkingConfig(enable_contextual_retrieval=settings.enable_contextual_retrieval),
+        llm_factory=llm_factory,
+    )
+
+    # --- Proposition Chunking (PoC) ---
+    # In production, this would use a production LLM from LLMGateway
+    from centrag.implementations.noop_llm import NoOpLLM
+
+    ingestion_llm = NoOpLLM(model_name="proposition-llm-v1")
+    proposition_chunker = PropositionChunker(llm=ingestion_llm)
+    pipeline.register_chunker(ChunkingStrategy.PROPOSITION, proposition_chunker)
 
     # --- VECTORLESS path: Tree builder ---
     tree_builder = PageIndexTreeBuilder(

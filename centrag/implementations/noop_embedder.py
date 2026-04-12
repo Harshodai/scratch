@@ -7,11 +7,11 @@ AWS Bedrock credentials or a local model.
 
 Production replacement: BedrockEmbedder, OpenAIEmbedder, or LocalEmbedder.
 """
+
 from __future__ import annotations
 
 import hashlib
 import random
-from typing import Any
 
 from centrag.utils.logger import get_logger
 

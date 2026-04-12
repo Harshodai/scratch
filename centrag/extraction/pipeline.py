@@ -14,18 +14,21 @@ SOLID:
   - OCP: Add new formats or strategies without modifying this class.
   - DIP: Depends on ParserRegistry and ChunkerProtocol, not concrete classes.
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
-from centrag.abstractions.extractor import ContentType, ExtractedDocument
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy, ChunkResult
-from centrag.extraction.parsers.base import ParserRegistry
+from centrag.abstractions.extractor import ContentType, ExtractedDocument
+from centrag.abstractions.llm import LLMProtocol
 from centrag.extraction.chunkers.fixed import FixedChunker
+from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.chunkers.recursive import RecursiveChunker
+from centrag.extraction.parsers.base import ParserRegistry
+from centrag.utils.logger import get_logger
 
 logger = get_logger("extraction.pipeline")
 
@@ -33,6 +36,7 @@ logger = get_logger("extraction.pipeline")
 @dataclass(frozen=True)
 class ExtractionResult:
     """Immutable result of the full extraction pipeline."""
+
     document: ExtractedDocument
     chunks: list[ChunkResult]
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -78,20 +82,24 @@ class ExtractionPipeline:
         self,
         parser_registry: ParserRegistry,
         default_chunking: ChunkingConfig | None = None,
+        llm_factory: Callable[[], LLMProtocol] | None = None,
     ) -> None:
         self._registry = parser_registry
         self._default_chunking = default_chunking or ChunkingConfig()
+        self._llm_factory = llm_factory
 
         # Pre-built chunker instances (Strategy Pattern)
         self._chunkers = {
             ChunkingStrategy.FIXED: FixedChunker(),
             ChunkingStrategy.RECURSIVE: RecursiveChunker(),
+            ChunkingStrategy.PROPOSITION: PropositionChunker(),
             # SEMANTIC and STRUCTURE_AWARE are added when available
         }
 
         # Try to register optional chunkers
         try:
             from centrag.extraction.chunkers.structure_aware import StructureAwareChunker
+
             self._chunkers[ChunkingStrategy.STRUCTURE_AWARE] = StructureAwareChunker()
         except ImportError:
             pass
@@ -135,10 +143,7 @@ class ExtractionPipeline:
         )
 
         # --- Step 2: Extract section headers (for context enrichment) ---
-        section_headers = [
-            el.content for el in document.elements
-            if el.element_type == "header"
-        ]
+        section_headers = [el.content for el in document.elements if el.element_type == "header"]
 
         # --- Step 3: Chunk ---
         chunker = self._chunkers.get(config.strategy)
@@ -164,6 +169,41 @@ class ExtractionPipeline:
             chunk_count=len(chunks),
             total_tokens=sum(c.token_count for c in chunks),
         )
+
+        # --- Step 4: Contextualize Chunks (Anthropic 2024 Pattern) ---
+        if config.enable_contextual_retrieval and self._llm_factory:
+            llm = self._llm_factory()
+            logger.info("contextualizing_chunks", chunk_count=len(chunks))
+
+            # Implementation note: In production this would be parallelized
+            for chunk in chunks:
+                prompt = f"""
+                <document>
+                {document.text[:10000]}  # Context window limit for summary
+                </document>
+                
+                Here is a chunk from the document:
+                <chunk>
+                {chunk.content}
+                </chunk>
+                
+                Please provide a short, one-sentence context that situates this chunk within the overall document 
+                to improve retrieval. Respond only with the one-sentence context.
+                """
+
+                try:
+                    llm_resp = await llm.generate(prompt)
+                    context_summary = llm_resp.content.strip()
+                    # Prepend context to the chunk content
+                    new_content = f"[Context: {context_summary}]\n\n{chunk.content}"
+
+                    # Update chunk content (we need to create a new instance if frozen)
+                    from dataclasses import replace
+
+                    chunks[chunks.index(chunk)] = replace(chunk, content=new_content)
+                except Exception as e:
+                    logger.warning("contextualization_failed", error=str(e))
+                    continue
 
         return ExtractionResult(
             document=document,

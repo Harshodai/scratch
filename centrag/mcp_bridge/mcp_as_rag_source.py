@@ -20,6 +20,7 @@ Design Standards:
   - Timeouts prevent MCP calls from blocking the pipeline
   - Errors are gracefully handled (pipeline continues without MCP data)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +35,7 @@ logger = get_logger("mcp_bridge.data_source")
 @dataclass(frozen=True)
 class MCPSourceResult:
     """Result from calling an MCP tool as a data source."""
+
     content: str
     tool_name: str
     source_server: str
@@ -46,14 +48,14 @@ class MCPDataSource:
 
     Usage in RetrievalEngine:
         mcp_source = MCPDataSource(mcp_client)
-        
+
         # During retrieval, fetch live data:
         live_data = await mcp_source.fetch_context(
             query="revenue last quarter",
             tool_name="query_gosdb",
             params={"query": "SELECT revenue FROM quarterly_reports WHERE quarter='Q4'"},
         )
-        
+
         # Inject into context alongside vector search results
         context = vector_results + live_data
 
@@ -118,7 +120,7 @@ class MCPDataSource:
             # Convert MCP result to context chunks
             return self._parse_result(result, tool_name)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "mcp_call_timeout",
                 tool=tool_name,
@@ -185,10 +187,7 @@ class MCPDataSource:
             )
         elif isinstance(result, dict):
             # Handle dict results (e.g., from query_gosdb)
-            content = "\n".join(
-                f"{k}: {v}" for k, v in result.items()
-                if not k.startswith("_")
-            )
+            content = "\n".join(f"{k}: {v}" for k, v in result.items() if not k.startswith("_"))
             chunks.append(
                 MCPSourceResult(
                     content=content,

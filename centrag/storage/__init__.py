@@ -23,7 +23,8 @@ Storage package — Unified DocumentStore for dual-path RAG.
 │    - meta.json / cleaned_text.txt → both paths                     │
 └─────────────────────────────────────────────────────────────────────┘
 """
-from centrag.storage.document_store import DocumentStore, DocumentMeta
+
+from centrag.storage.document_store import DocumentMeta, DocumentStore
 
 __all__ = [
     "DocumentStore",

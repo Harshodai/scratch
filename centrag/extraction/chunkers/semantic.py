@@ -9,22 +9,22 @@ it requires calling the embedding model for every sentence.
 
 Design: STRATEGY PATTERN leaf — implements ChunkerProtocol.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 from centrag.abstractions.chunker import (
     ChunkingConfig,
     ChunkingStrategy,
     ChunkResult,
-    ChunkerProtocol,
 )
 
 
 def _split_into_sentences(text: str) -> list[str]:
     """Split text into sentences using regex."""
-    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = re.split(r"(?<=[.!?])\s+", text)
     return [s.strip() for s in sentences if s.strip()]
 
 
@@ -92,6 +92,7 @@ class SemanticChunker:
             # Already in async context — cannot use asyncio.run().
             # Run in a dedicated thread with its own event loop.
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(
                     asyncio.run,
@@ -100,9 +101,7 @@ class SemanticChunker:
                 return future.result()
         except RuntimeError:
             # No running loop — safe to use asyncio.run
-            return asyncio.run(
-                self.chunk_async(text, config, document_title, section_headers)
-            )
+            return asyncio.run(self.chunk_async(text, config, document_title, section_headers))
 
     async def chunk_async(
         self,
@@ -116,16 +115,20 @@ class SemanticChunker:
 
         sentences = _split_into_sentences(text)
         if len(sentences) <= 1:
-            return [
-                ChunkResult(
-                    content=text,
-                    chunk_index=0,
-                    start_char=0,
-                    end_char=len(text),
-                    token_count=int(len(text.split()) * 1.3),
-                    metadata={"strategy": "semantic"},
-                )
-            ] if text.strip() else []
+            return (
+                [
+                    ChunkResult(
+                        content=text,
+                        chunk_index=0,
+                        start_char=0,
+                        end_char=len(text),
+                        token_count=int(len(text.split()) * 1.3),
+                        metadata={"strategy": "semantic"},
+                    )
+                ]
+                if text.strip()
+                else []
+            )
 
         # Embed all sentences
         embeddings = await self._embed_fn(sentences)

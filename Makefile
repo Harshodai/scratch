@@ -28,30 +28,67 @@ run:
 	uvicorn centrag.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 
 test:
-	pytest tests/ -v --tb=short
+	py -m pytest tests/ -v --tb=short
 
 test-cov:
-	pytest tests/ -v --cov=centrag --cov-report=term-missing
+	py -m pytest tests/ -v --cov=centrag --cov-report=term-missing
+
+# --- Observability & AgentsView ---
+view:
+	@echo "🚀 Starting AgentsView Dashboard (via skills)..."
+	npx skills run antigravity-view
+
+sync-view:
+	@echo "🔄 Syncing sessions to AgentsView..."
+	py centrag/scripts/sync_agentsview.py
+
+view-sessions: sync-view
+	@echo "🚀 Launching AgentsView Dashboard from local repository..."
+	cd agentsview-repo && go run -tags fts5 ./cmd/agentsview
+
+agentsview-build:
+	@echo "🛠️ Building AgentsView from source..."
+	cd agentsview-repo && $(MAKE) build
+
+# --- MCP (Model Context Protocol) ---
+mcp:
+	@echo "🛠️ Starting Enterprise MCP Server..."
+	py -m mcp_enterprise_server.server
+
+mcp-stdio:
+	@echo "🛠️ Starting Enterprise MCP Server (stdio mode)..."
+	py -m mcp_enterprise_server.server --transport stdio
 
 lint:
-	ruff check centrag/ tests/
-	mypy centrag/
+	py -m ruff check centrag/ tests/
+	py -m mypy centrag/
 
 format:
-	ruff format centrag/ tests/
-	ruff check --fix centrag/ tests/
+	py -m ruff format centrag/ tests/
+	py -m ruff check --fix centrag/ tests/
 
 security:
-	bandit -r centrag/ -ll -ii
-	safety check
+	py -m bandit -r centrag/ -ll -ii
+	py -m safety check
 
 # --- SDLC Operations ---
 build-graph:
-	python -m code_review_graph build --repo .
+	py -m code_review_graph build --repo .
 
 # --- Quality ---
+# --- Quality & Evaluation ---
 eval:
-	python -m tests.eval_ragas
+	py -m code_review_graph eval --all --report --repo .
+
+graph-status:
+	py -m code_review_graph status --repo .
+
+audit:
+	@echo "🔍 Running Full System Audit..."
+	$(MAKE) lint
+	$(MAKE) security
+	$(MAKE) graph-status
+	$(MAKE) eval
 
 loadtest:
 	locust -f tests/loadtest.py --host=http://localhost:8000

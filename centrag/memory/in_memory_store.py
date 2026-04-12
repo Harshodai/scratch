@@ -9,20 +9,18 @@ Implements MemoryProtocol faithfully:
   - Temporal versioning (valid_from/valid_to)
   - Basic decay scoring (older memories score lower)
 """
+
 from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any
-
-from centrag.utils.logger import get_logger
+from datetime import UTC, datetime
 
 from centrag.abstractions.memory import (
-    MemoryProtocol,
     MemoryEntry,
     MemoryType,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("memory.in_memory")
 
@@ -51,7 +49,7 @@ class InMemoryStore:
         Store a new memory. If it conflicts with an existing one,
         the old memory gets valid_to=NOW() (temporal versioning).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         entry = MemoryEntry(
             id=str(uuid.uuid4()),
             content=content,
@@ -98,10 +96,7 @@ class InMemoryStore:
 
         # Optionally filter by user_id
         if user_id:
-            current = [
-                e for e in current
-                if e.metadata.get("user_id") == user_id
-            ]
+            current = [e for e in current if e.metadata.get("user_id") == user_id]
 
         # Simple relevance: keyword overlap weighted by decay
         query_words = set(query.lower().split())
@@ -110,9 +105,7 @@ class InMemoryStore:
             entry_words = set(entry.content.lower().split())
             overlap = len(query_words & entry_words)
             # Compute decay based on age
-            age_hours = (
-                datetime.now(timezone.utc) - entry.valid_from
-            ).total_seconds() / 3600
+            age_hours = (datetime.now(UTC) - entry.valid_from).total_seconds() / 3600
             decay = 0.5 ** (age_hours / 72.0)  # half-life = 72h
             return overlap * decay * entry.relevance_score
 
@@ -128,12 +121,13 @@ class InMemoryStore:
         than mutating it.
         """
         entries = self._store.get(team_id, [])
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for i, entry in enumerate(entries):
             if entry.id == memory_id:
                 # Replace frozen entry with expired version
                 from dataclasses import replace
+
                 expired = replace(entry, valid_to=now)
                 entries[i] = expired
                 logger.info(

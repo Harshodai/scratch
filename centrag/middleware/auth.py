@@ -12,21 +12,18 @@ Agentic Pattern: GOVERNANCE-AS-CODE
     - Even if an agent calls the API, it MUST present a valid API key
     - The team_id is injected into RequestContext and flows through everything
 """
+
 from __future__ import annotations
 
 import hashlib
 import secrets
 import uuid
-from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
 from centrag.config import Settings, get_settings
 from centrag.middleware import RequestContext
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- API Key Header ---
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)

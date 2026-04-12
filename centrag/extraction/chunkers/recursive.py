@@ -8,29 +8,26 @@ This is the DEFAULT chunking strategy — balances quality vs. speed.
 
 Design: STRATEGY PATTERN leaf — implements ChunkerProtocol.
 """
-from __future__ import annotations
 
-import re
+from __future__ import annotations
 
 from centrag.abstractions.chunker import (
     ChunkingConfig,
     ChunkingStrategy,
     ChunkResult,
-    ChunkerProtocol,
 )
-
 
 # Separators ordered by preference (most to least natural)
 DEFAULT_SEPARATORS = [
-    "\n\n\n",     # Triple newline (section breaks)
-    "\n\n",       # Double newline (paragraphs)
-    "\n",         # Single newline
-    ". ",         # Sentence boundary
-    "? ",         # Question boundary
-    "! ",         # Exclamation boundary
-    "; ",         # Semicolon
-    ", ",         # Comma
-    " ",          # Word boundary (last resort)
+    "\n\n\n",  # Triple newline (section breaks)
+    "\n\n",  # Double newline (paragraphs)
+    "\n",  # Single newline
+    ". ",  # Sentence boundary
+    "? ",  # Question boundary
+    "! ",  # Exclamation boundary
+    "; ",  # Semicolon
+    ", ",  # Comma
+    " ",  # Word boundary (last resort)
 ]
 
 
@@ -157,11 +154,9 @@ class RecursiveChunker:
                     current_chunk = []
                     current_size = 0
 
-                remaining_seps = separators[separators.index(chosen_sep) + 1:]
+                remaining_seps = separators[separators.index(chosen_sep) + 1 :]
                 if remaining_seps:
-                    sub_chunks = self._recursive_split(
-                        split, remaining_seps, chunk_size, chunk_overlap, min_size
-                    )
+                    sub_chunks = self._recursive_split(split, remaining_seps, chunk_size, chunk_overlap, min_size)
                     chunks.extend(sub_chunks)
                 else:
                     chunks.append(split)

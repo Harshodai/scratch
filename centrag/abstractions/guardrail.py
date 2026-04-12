@@ -20,6 +20,7 @@ Design Pattern: COMPOSITE PATTERN
     - GuardrailChain IS-A InputRailProtocol (recursive composition)
     - You can nest chains inside chains for domain-specific pipelines
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ class RailContext:
     (team identity, namespace, tier) without coupling rails
     to FastAPI or any specific framework.
     """
+
     team_id: str
     namespace: str = "default"
     tier: str = "standard"  # "standard" | "premium" | "enterprise"
@@ -45,6 +47,7 @@ class RailContext:
 @dataclass(frozen=True)
 class ValidatedQuery:
     """Result of input rail validation. Carries the cleaned query."""
+
     original_query: str
     sanitized_query: str
     flags: list[str] = field(default_factory=list)  # e.g., ["pii_detected"]
@@ -53,6 +56,7 @@ class ValidatedQuery:
 @dataclass(frozen=True)
 class ValidatedResponse:
     """Result of output rail validation. Carries the cleaned response."""
+
     original_answer: str
     sanitized_answer: str
     redactions_applied: list[str] = field(default_factory=list)  # e.g., ["ssn", "email"]

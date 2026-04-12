@@ -6,13 +6,13 @@ Simple, fast, predictable. Good baseline before evaluating smarter strategies.
 
 Design: STRATEGY PATTERN leaf — implements ChunkerProtocol.
 """
+
 from __future__ import annotations
 
 from centrag.abstractions.chunker import (
     ChunkingConfig,
     ChunkingStrategy,
     ChunkResult,
-    ChunkerProtocol,
 )
 
 

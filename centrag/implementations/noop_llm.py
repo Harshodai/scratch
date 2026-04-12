@@ -6,14 +6,14 @@ allowing pipeline testing without API calls.
 
 Production replacement: BedrockLLM, OpenAILLM, or LocalLLM.
 """
+
 from __future__ import annotations
 
 import time
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
 
+from centrag.abstractions.llm import LLMResponse, QueryComplexity
 from centrag.utils.logger import get_logger
-
-from centrag.abstractions.llm import LLMProtocol, LLMResponse, QueryComplexity
 
 logger = get_logger("implementations.llm.noop")
 
@@ -54,10 +54,7 @@ class NoOpLLM:
 
         # Build a deterministic answer from context
         if context:
-            context_summary = "\n".join(
-                f"[Source {i + 1}]: {chunk[:200]}"
-                for i, chunk in enumerate(context[:5])
-            )
+            context_summary = "\n".join(f"[Source {i + 1}]: {chunk[:200]}" for i, chunk in enumerate(context[:5]))
             answer = (
                 f"Based on the provided sources, here is what I found:\n\n"
                 f"{context_summary}\n\n"
@@ -65,10 +62,7 @@ class NoOpLLM:
                 f"in response to: {prompt[:100]}"
             )
         else:
-            answer = (
-                "No relevant context was provided. "
-                "Please ensure documents have been uploaded and indexed."
-            )
+            answer = "No relevant context was provided. Please ensure documents have been uploaded and indexed."
 
         # Estimate token counts
         input_tokens = len(prompt.split()) + sum(len(c.split()) for c in context)

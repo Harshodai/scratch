@@ -12,10 +12,11 @@ Security: ROW-LEVEL SECURITY (RLS)
     - Even if code forgets a WHERE clause, PostgreSQL blocks cross-tenant access
     - FORCE ROW LEVEL SECURITY ensures even table owners are restricted
 """
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
@@ -26,8 +27,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    event,
-    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncAttrs
@@ -36,11 +35,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(AsyncAttrs, DeclarativeBase):
     """Base class for all models."""
+
     pass
 
 
 from centrag.utils.time import utcnow
-
 
 # =============================================================================
 # TEAM & AUTH
@@ -50,19 +49,13 @@ from centrag.utils.time import utcnow
 class Team(Base):
     __tablename__ = "teams"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    tier: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="standard"
-    )  # standard | premium | enterprise
+    tier: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")  # standard | premium | enterprise
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     # Relationships
     api_keys: Mapped[list[ApiKey]] = relationship(back_populates="team", lazy="selectin")
@@ -72,9 +65,7 @@ class Team(Base):
 class ApiKey(Base):
     __tablename__ = "api_keys"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     team_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
     )
@@ -102,9 +93,7 @@ class ApiKey(Base):
 class Document(Base):
     __tablename__ = "documents"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     team_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
     )
@@ -135,9 +124,7 @@ class Document(Base):
 class Chunk(Base):
     __tablename__ = "chunks"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
     )
@@ -174,26 +161,20 @@ class MemoryEntry(Base):
 
     __tablename__ = "memory_entries"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     team_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
     )
     user_context: Mapped[str | None] = mapped_column(String(255))
     memory_content: Mapped[str] = mapped_column(Text, nullable=False)
-    memory_type: Mapped[str] = mapped_column(
-        String(50), nullable=False
-    )  # fact | preference | event | relation
+    memory_type: Mapped[str] = mapped_column(String(50), nullable=False)  # fact | preference | event | relation
     relevance_score: Mapped[float] = mapped_column(Float, default=1.0)
     vector_id: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # --- Temporal versioning (Zep/HydraDB pattern) ---
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    superseded_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("memory_entries.id")
-    )
+    superseded_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("memory_entries.id"))
     decay_score: Mapped[float] = mapped_column(Float, default=1.0)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -206,28 +187,36 @@ class MemoryEntry(Base):
 
 
 # =============================================================================
-# AUDIT LOG
+# FEEDBACK & ACTIVE LEARNING
 # =============================================================================
 
 
-class AuditLog(Base):
-    """Immutable audit trail — append-only, no UPDATE/DELETE."""
+class Feedback(Base):
+    """
+    User feedback for active learning (thumbs up/down).
+    """
 
-    __tablename__ = "audit_logs"
+    __tablename__ = "feedback"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
     )
-    team_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    action: Mapped[str] = mapped_column(String(100), nullable=False)
-    resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    resource_id: Mapped[str | None] = mapped_column(String(255))
-    details: Mapped[dict] = mapped_column(JSONB, default=dict)
-    ip_address: Mapped[str | None] = mapped_column(String(45))
+    request_id: Mapped[str | None] = mapped_column(String(255))
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL")
+    )
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)  # -1 (down) | 1 (up)
+    comments: Mapped[str | None] = mapped_column(Text)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
-        Index("ix_audit_team_created", "team_id", "created_at"),
+        Index("ix_feedback_team_id", "team_id"),
+        Index("ix_feedback_doc_id", "document_id"),
+        Index("ix_feedback_score", "score"),
     )
 
 
@@ -245,6 +234,8 @@ ALTER TABLE memory_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memory_entries FORCE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
+ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedback FORCE ROW LEVEL SECURITY;
 
 -- Create policies: users can only see rows where team_id matches session variable
 CREATE POLICY team_isolation_documents ON documents
@@ -257,5 +248,8 @@ CREATE POLICY team_isolation_memory ON memory_entries
     USING (team_id = current_setting('app.current_team_id')::uuid);
 
 CREATE POLICY team_isolation_audit ON audit_logs
+    USING (team_id = current_setting('app.current_team_id')::uuid);
+
+CREATE POLICY team_isolation_feedback ON feedback
     USING (team_id = current_setting('app.current_team_id')::uuid);
 """

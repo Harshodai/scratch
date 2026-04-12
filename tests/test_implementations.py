@@ -7,22 +7,22 @@ Tests:
   - NoOpLLM: generation, complexity classification, streaming
   - NoOpReranker: scoring, ordering, top_n limit
 """
+
 from __future__ import annotations
 
-import asyncio
 import pytest
 
+from centrag.abstractions.llm import QueryComplexity
+from centrag.abstractions.vectorstore import VectorFilter
 from centrag.implementations.noop_embedder import NoOpEmbedder
-from centrag.implementations.noop_vectorstore import NoOpVectorStore
 from centrag.implementations.noop_llm import NoOpLLM
 from centrag.implementations.noop_reranker import NoOpReranker
-from centrag.abstractions.vectorstore import VectorFilter
-from centrag.abstractions.llm import QueryComplexity
-
+from centrag.implementations.noop_vectorstore import NoOpVectorStore
 
 # =============================================================================
 # NoOpEmbedder
 # =============================================================================
+
 
 class TestNoOpEmbedder:
     @pytest.fixture
@@ -72,6 +72,7 @@ class TestNoOpEmbedder:
 # NoOpVectorStore
 # =============================================================================
 
+
 class TestNoOpVectorStore:
     @pytest.fixture
     def store(self):
@@ -104,7 +105,8 @@ class TestNoOpVectorStore:
         await store.upsert("docs", "id2", [1.0, 0.0], {"team_id": "t1", "status": "active"})
 
         results = await store.search(
-            "docs", [1.0, 0.0],
+            "docs",
+            [1.0, 0.0],
             VectorFilter(
                 must=[{"key": "team_id", "match": {"value": "t1"}}],
                 must_not=[{"key": "status", "match": {"value": "archived"}}],
@@ -131,7 +133,8 @@ class TestNoOpVectorStore:
         await store.upsert("docs", "id2", [0.0, 1.0], {"team_id": "t1"})
 
         results = await store.search(
-            "docs", [1.0, 0.0],
+            "docs",
+            [1.0, 0.0],
             VectorFilter(must=[{"key": "team_id", "match": {"value": "t1"}}]),
             score_threshold=0.5,
         )
@@ -141,6 +144,7 @@ class TestNoOpVectorStore:
 # =============================================================================
 # NoOpLLM
 # =============================================================================
+
 
 class TestNoOpLLM:
     @pytest.fixture
@@ -188,6 +192,7 @@ class TestNoOpLLM:
 # =============================================================================
 # NoOpReranker
 # =============================================================================
+
 
 class TestNoOpReranker:
     @pytest.fixture

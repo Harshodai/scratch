@@ -17,9 +17,9 @@ Design Pattern: COMPOSITE — combines two retrieval strategies into one result.
 SOLID: Single Responsibility — only fuses results. No retrieval logic.
 SOLID: Open/Closed — add more retrieval paths by extending the fusion, not modifying it.
 """
+
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -35,10 +35,11 @@ class FusedResult:
 
     Tracks which path(s) contributed this result and the fusion score.
     """
+
     content: str
     document_id: str
     rrf_score: float
-    sources: list[str]          # ["pageindex", "vector"] — which paths found this
+    sources: list[str]  # ["pageindex", "vector"] — which paths found this
     relevance_score: float = 0.0  # Original score from best source
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -50,6 +51,7 @@ class HybridResult:
 
     Includes both fused results and per-path diagnostics for evaluation.
     """
+
     fused: list[FusedResult]
     pageindex_count: int = 0
     vector_count: int = 0
@@ -131,14 +133,16 @@ class HybridRetriever:
         fused: list[FusedResult] = []
         for key in sorted_keys[:top_n]:
             result = result_map[key]
-            fused.append(FusedResult(
-                content=result.get("content", ""),
-                document_id=result.get("document_id", ""),
-                rrf_score=score_map[key],
-                sources=list(set(source_map.get(key, []))),
-                relevance_score=result.get("relevance_score", 0.0),
-                metadata=result.get("metadata", {}),
-            ))
+            fused.append(
+                FusedResult(
+                    content=result.get("content", ""),
+                    document_id=result.get("document_id", ""),
+                    rrf_score=score_map[key],
+                    sources=list(set(source_map.get(key, []))),
+                    relevance_score=result.get("relevance_score", 0.0),
+                    metadata=result.get("metadata", {}),
+                )
+            )
 
         logger.info(
             "hybrid_fusion_complete",

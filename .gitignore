@@ -32,3 +32,8 @@ htmlcov/
 
 # --- Alembic ---
 # Don't ignore alembic/versions/ — those are your migrations
+.code-review-graph/
+.deepeval/
+.gemini/
+.ruff_cache/
+agentsview-repo/

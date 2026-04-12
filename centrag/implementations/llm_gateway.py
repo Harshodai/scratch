@@ -16,36 +16,40 @@ SOLID: Single Responsibility — only resilience + observability. No generation 
 SOLID: Open/Closed — add new resilience patterns without modifying LLM impls.
 SOLID: Liskov Substitution — LLMGateway IS-A LLMProtocol to callers.
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, AsyncIterator
-
-from centrag.utils.logger import get_logger
+from typing import Any
 
 from centrag.abstractions.llm import LLMProtocol, LLMResponse, QueryComplexity
+from centrag.utils.logger import get_logger
 
 logger = get_logger("llm_gateway")
 
 
 # ── Circuit Breaker ─────────────────────────────────────────────────
 
+
 class CircuitState(str, Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing — reject all calls
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing — reject all calls
     HALF_OPEN = "half_open"  # Testing recovery — allow 1 call
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Policy for circuit breaker behavior."""
-    failure_threshold: int = 5       # Consecutive failures to trip
-    recovery_timeout: float = 30.0   # Seconds before half-open
-    success_threshold: int = 2       # Consecutive successes to close
+
+    failure_threshold: int = 5  # Consecutive failures to trip
+    recovery_timeout: float = 30.0  # Seconds before half-open
+    success_threshold: int = 2  # Consecutive successes to close
 
 
 class CircuitBreaker:
@@ -112,9 +116,11 @@ class CircuitBreaker:
 
 # ── Cost Tracker ────────────────────────────────────────────────────
 
+
 @dataclass
 class CostRecord:
     """Per-team cost tracking record."""
+
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     total_calls: int = 0
@@ -199,6 +205,7 @@ class CostTracker:
 
 # ── Latency Monitor ────────────────────────────────────────────────
 
+
 class LatencyMonitor:
     """
     Simple latency histogram for LLM calls.
@@ -238,15 +245,18 @@ class LatencyMonitor:
 
 # ── Model Router ────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class ModelRoutingConfig:
     """Map query complexity to LLM models."""
+
     simple_model: str = "gpt-4o-mini"
     moderate_model: str = "gpt-4o"
     complex_model: str = "gpt-4o"
 
 
 # ── LLM Gateway ────────────────────────────────────────────────────
+
 
 class LLMGateway:
     """
@@ -314,16 +324,12 @@ class LLMGateway:
         # Budget gate
         if not self._cost_tracker.is_within_budget(self._team_id):
             raise BudgetExceededError(
-                f"Team {self._team_id} has exceeded LLM budget. "
-                f"Usage: {self._cost_tracker.get_usage(self._team_id)}"
+                f"Team {self._team_id} has exceeded LLM budget. Usage: {self._cost_tracker.get_usage(self._team_id)}"
             )
 
         # Circuit breaker gate
         if not self._circuit.is_call_allowed:
-            raise CircuitOpenError(
-                f"Circuit breaker is OPEN. "
-                f"Recovery in {self._circuit._config.recovery_timeout}s"
-            )
+            raise CircuitOpenError(f"Circuit breaker is OPEN. Recovery in {self._circuit._config.recovery_timeout}s")
 
         # Retry loop
         last_error: Exception | None = None
@@ -378,9 +384,7 @@ class LLMGateway:
                     backoff = self._base_backoff * (2 ** (attempt - 1))
                     await asyncio.sleep(backoff)
 
-        raise RuntimeError(
-            f"LLM call failed after {self._max_retries} retries: {last_error}"
-        )
+        raise RuntimeError(f"LLM call failed after {self._max_retries} retries: {last_error}")
 
     async def classify_complexity(self, query: str) -> QueryComplexity:
         """Delegate to wrapped LLM."""
@@ -398,19 +402,20 @@ class LLMGateway:
         if not self._circuit.is_call_allowed:
             raise CircuitOpenError("Circuit breaker is OPEN")
 
-        async for chunk in self._llm.generate_stream(
-            prompt, context, system_prompt, temperature, max_tokens
-        ):
+        async for chunk in self._llm.generate_stream(prompt, context, system_prompt, temperature, max_tokens):
             yield chunk
 
 
 # ── Custom Errors ───────────────────────────────────────────────────
 
+
 class CircuitOpenError(Exception):
     """Raised when circuit breaker is OPEN."""
+
     pass
 
 
 class BudgetExceededError(Exception):
     """Raised when team has exceeded LLM budget."""
+
     pass

@@ -30,19 +30,21 @@ FREE Observability Options (ranked by production readiness):
     │  • Jaeger all-in-one (docker, local tracing)                  │
     └────────────────────────────────────────────────────────────────┘
 """
+
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
-import time
-
+from typing import Any, Protocol, runtime_checkable
 
 # =============================================================================
 # Data Types
 # =============================================================================
+
 
 class SpanKind(str, Enum):
     RETRIEVAL = "retrieval"
@@ -58,6 +60,7 @@ class SpanKind(str, Enum):
 @dataclass
 class SpanContext:
     """Mutable context for a traced span."""
+
     name: str
     kind: SpanKind
     start_time: float = field(default_factory=time.monotonic)
@@ -77,6 +80,7 @@ class SpanContext:
 @dataclass(frozen=True)
 class MetricPoint:
     """A single metric data point."""
+
     name: str
     value: float
     tags: dict[str, str] = field(default_factory=dict)
@@ -86,6 +90,7 @@ class MetricPoint:
 # =============================================================================
 # Protocols (Interface Segregation)
 # =============================================================================
+
 
 @runtime_checkable
 class TracingProtocol(Protocol):

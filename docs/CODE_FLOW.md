@@ -131,11 +131,9 @@ def build_retrieval_engine(settings, redis_client, document_store) -> RetrievalE
     memory = InMemoryStore()                              # centrag/memory/in_memory_store.py
     guardrail_engine = GuardrailEngine(GuardrailsConfig())# centrag/guardrails/engine.py
 
-    # VECTOR path: Qdrant (if CENTRAG_ENABLE_VECTOR=true)
-    if settings.enable_vector:
-        vectorstore = QdrantVectorStore(...)              # centrag/implementations/qdrant_vectorstore.py
-    else:
-        vectorstore = NoOpVectorStore()                   # centrag/implementations/noop_vectorstore.py
+    # VECTOR path: Qdrant + Provider Strategy
+    # Selects NoOp, Bedrock (Titan V2), or OpenAI (text-embedding-3) based on config
+    embedder_factory, vs_factory, emb_name, vs_name = _build_vector_components(settings)
 
     # VECTORLESS path: PageIndex
     tree_builder = PageIndexTreeBuilder(...)              # centrag/implementations/pageindex_tree.py
@@ -143,18 +141,33 @@ def build_retrieval_engine(settings, redis_client, document_store) -> RetrievalE
         document_store, tree_builder, llm=None
     )
 
-    # Shared routing + fusion
+    # SHARED: QueryRouter + HybridRetriever
     query_router = QueryRouter(document_store)            # centrag/retrieval/query_router.py
     hybrid_retriever = HybridRetriever(k=60)              # centrag/retrieval/hybrid.py
 
+    # NEW: Two-Pass Reasoning Generator
+    from centrag.retrieval.generator import TwoPassGenerator
+    generator = TwoPassGenerator(llm=None, cache=cache)   # centrag/retrieval/generator.py
+
     return RetrievalEngine(                               # centrag/retrieval/engine.py
-        embedder_factory, vectorstore_factory,
+        embedder_factory, vs_factory,
         reranker_factory=NoOpReranker,
-        llm_factory=lambda: NoOpLLM(model_name="noop-llm-v1"),
-        cache, memory,
-        input_rails, output_rails,
-        pageindex_retriever, document_store,
-        query_router, hybrid_retriever,
+        llm_factory=_build_llm_factory(settings),         # Dynamic selection
+        cache=cache, 
+        memory=memory,
+        sparse_embedder_factory=sparse_embedder_factory,  # FIXED: Dynamically detects language (NLTK)
+        input_rails=input_rails, 
+        output_rails=output_rails,
+        tracing=tracing, 
+        metrics=metrics, 
+        cost_tracker=cost_tracker,
+        pageindex_retriever=pageindex_retriever, 
+        document_store=document_store,
+        query_router=query_router, 
+        hybrid_retriever=hybrid_retriever,
+        query_transformer=query_transformer,
+        generator=generator,                              # TWO-PASS GENERATOR
+        enable_compression=settings.enable_contextual_compression, # NEW: Contextual Compression
     )
 ```
 
@@ -170,7 +183,14 @@ def build_ingestion_service(settings, document_store) -> IngestionService:
     registry.register(HTMLParser())                       # centrag/extraction/parsers/text.py
     # CSVParser available at:                             # centrag/extraction/parsers/csv_parser.py
 
-    pipeline = ExtractionPipeline(parser_registry=registry)# centrag/extraction/pipeline.py
+    pipeline = ExtractionPipeline(
+        parser_registry=registry,
+        default_chunking=ChunkingConfig(
+            enable_contextual_retrieval=settings.enable_contextual_retrieval # NEW: Situated Summaries
+        ),
+        llm_factory=_build_llm_factory(settings)[0]
+    )
+
     tree_builder = PageIndexTreeBuilder(...)               # centrag/implementations/pageindex_tree.py
     cleaner = DocumentCleaner(DocumentCleanerConfig())     # centrag/ingestion/cleaner.py
 
@@ -243,20 +263,17 @@ _consume_loop() → _process_job(job)
 ```
 ingest()
 │
-├── Step 1: PARSE
+├── Step 1: PARSE & CONTEXTUALIZE
 │   ├── _resolve_content_type(mime, filename)          # line 67
 │   │   Uses _MIME_TO_CONTENT_TYPE dict (line 50)
 │   │   Fallback: extension-based (.pdf → PDF, .csv → CSV)
 │   │
 │   └── ExtractionPipeline.process(file_bytes, ct)     # centrag/extraction/pipeline.py
 │       └── ParserRegistry.get(content_type)            # centrag/extraction/parsers/base.py:56
-│           ├── ContentType.PDF      → PDFParser         # centrag/extraction/parsers/pdf.py
-│           ├── ContentType.PLAIN_TEXT → PlainTextParser  # centrag/extraction/parsers/text.py
-│           ├── ContentType.MARKDOWN → MarkdownParser     # centrag/extraction/parsers/text.py
-│           ├── ContentType.HTML     → HTMLParser          # centrag/extraction/parsers/text.py
-│           └── ContentType.CSV      → CSVParser           # centrag/extraction/parsers/csv_parser.py
-│               └── Streams in 1000-row batches
-│               └── Converts to markdown tables
+│       └── NEW: Contextualization Loop (Anthropic 2024 Pattern):
+│           ├── If enable_contextual_retrieval=True
+│           ├── Generates 1-sentence situational summary for each chunk via LLM
+│           └── Prepends summary to chunk.content before indexing
 │       └── Returns: ExtractedDocument(text, content_type, metadata, pages)
 │
 ├── Step 2: CLEAN
@@ -387,6 +404,11 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │       # centrag/retrieval/hybrid.py
 │       # Reciprocal Rank Fusion: score = Σ 1/(k + rank), k=60
 │
+├── STEP 5.5: CONTEXTUAL COMPRESSION (Dynamic Refinement)
+│   If enable_contextual_compression=True:
+│   └── RetrievalEngine._compress_context(query, chunks)
+│   └── LLM trims chunks to keep ONLY sections relevant to query
+│
 ├── STEP 6: CRAG VALIDATION
 │   Check confidence of retrieved chunks via RerankerProtocol
 │   If chunks lack confidence → llm_query_extractor searches using synonym fallback query
@@ -408,6 +430,13 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │   └── ⑤ latency_monitor.record(elapsed)               # P50/P95/P99 histogram
 │   └── Returns: LLMResponse(text, model, tokens, cost)
 │
+├── STEP 8.1: TWO-PASS REASONING (If COMPLEX)           # centrag/retrieval/generator.py
+│   Triggered for oversized docs or frontier-model queries:
+│   ├── PASS 1: Fact Extraction per chunk (Atomic Grounding)
+│   ├── CACHE check (chunk_summaries namespace)          # Uses 7-day L2 Cache
+│   └── PASS 2: Synthesis based ONLY on extracted facts
+│   └── Result: Grounded answer with [Chunk#1, p4] citations
+│
 ├── STEP 9: OUTPUT GUARDRAILS
 │   ├── ResponseLengthRail.validate(response)
 │   ├── ConfidenceGateRail.validate(response)            # "I don't know" if no sources
@@ -417,6 +446,23 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 └── STEP 10: CACHE WRITE + RETURN
     cache.set(cache_key, response, namespace)
     Return: RetrievalResponse(answer, sources, cache_tier, ...)
+
+---
+
+## Active Learning Feedback Loop
+
+**File:** [`centrag/routes/feedback.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/routes/feedback.py)
+
+Capture user signal to optimize search accuracy over time.
+
+```
+POST /v1/feedback
+Body: { "request_id": "...", "score": 1, "comments": "..." }
+│
+├── team_id resolved from API key
+├── Stored in `feedback` table (SQLAlchemy)               # centrag/models.py
+└── Postgres RLS ensures developer/team isolation
+```
 ```
 
 ---
@@ -495,8 +541,9 @@ fuse(pageindex_results, vector_results) → merged_results
 | `VectorStoreProtocol` | [vectorstore.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/vectorstore.py) | `upsert()`, `search()`, `delete()` | `NoOpVectorStore`, `QdrantVectorStore` |
 | `LLMProtocol` | [llm.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/llm.py) | `generate()`, `classify_complexity()` | `NoOpLLM`, wrapped by `LLMGateway` |
 | `RerankerProtocol` | [reranker.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/reranker.py) | `rerank()` | `NoOpReranker` |
-| `ChunkerProtocol` | [chunker.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/chunker.py) | `chunk()`, `chunk_boundaries()` | `RecursiveChunker`, `ParentChildChunker`, `FixedChunker`, `SemanticChunker`, `StructureAwareChunker` |
+| `ChunkerProtocol` | [chunker.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/chunker.py) | `chunk()`, `chunk_boundaries()` | `RecursiveChunker`, `PropositionChunker`, `ParentChildChunker`, `FixedChunker`, `SemanticChunker` |
 | `CacheProtocol` | [cache.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/cache.py) | `get()`, `set()`, `invalidate()` | `L1InMemoryCache`, `L2RedisCache`, `TieredCacheOrchestrator` |
+| `SparseEmbedderProtocol` | [embedder.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/embedder.py) | `embed_query()`, `embed_documents()` | `BM25SparseEmbedder` (i18n aware via NLTK/langdetect) |
 | `MemoryProtocol` | [memory.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/memory.py) | `add()`, `recall()`, `forget()` | `InMemoryStore` |
 | `ExtractorProtocol` | [extractor.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/extractor.py) | `extract()`, `supported_types()` | `PDFParser`, `PlainTextParser`, `MarkdownParser`, `HTMLParser`, `CSVParser` |
 | `InputRailProtocol` | [guardrail.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/guardrail.py) | `check(query, ctx)` | 5 input rails (see below) |
@@ -622,6 +669,9 @@ centrag/
 ├── wiring.py                       build_retrieval_engine(), build_ingestion_service()
 ├── models.py                       SQLAlchemy async models + RLS
 ├── Makefile                        Central build system + Security Entrypoints
+├── scripts/
+│   ├── generate_ddl.py               Helper for DB schema generation
+│   └── sync_agentsview.py           Bridge to AgentsView visualization [NEW]
 │
 ├── abstractions/                   Protocol definitions (10 contracts)
 │   ├── embedder.py                   EmbedderProtocol
@@ -658,7 +708,8 @@ centrag/
 │       ├── recursive.py              RecursiveChunker (paragraph→sentence→word)
 │       ├── semantic.py               SemanticChunker (embedding boundaries)
 │       ├── structure_aware.py        StructureAwareChunker (heading-aware)
-│       └── parent_child.py           ParentChildChunker (512t parent + 128t child)
+│       ├── parent_child.py           ParentChildChunker (512t parent + 128t child)
+│       └── proposition.py            PropositionChunker (atomic fact extraction)
 │
 ├── ingestion/                      Document upload pipeline
 │   ├── service.py                    IngestionService.ingest() → IngestionResult
@@ -754,3 +805,140 @@ When an LLM coding agent works in evaluating or rewriting the CentRAG pipeline, 
 2. The agent reads the Orchestrator logic in `.agents/skills/agent-orchestrator/SKILL.md`.
 3. The LLM then references the mapped skill before updating the `.py` files. Example: `senior-security` + `harden` for guardrail updates.
 4. Finally, it uses `verification-before-completion`, rebuilding the **code-review-graph** to validate that new logic doesn't break dependent branches.
+5. **Visualization Ritual**: Every major change triggers a sync to `agentsview` via `python centrag/scripts/sync_agentsview.py`.
+
+
+# CentRAG — Technical Code Flow Guide
+
+> [!IMPORTANT]
+> This document is the **Source of Truth** for the CentRAG architectural flow. Every method signature, file path, and logic gate described here is physically verified against the `v1.2.0` codebase.
+
+---
+
+## 1. The Query Journey (Retrieval Sequence)
+
+The following sequence illustrates a single request to `POST /v1/retrieve`.
+
+```mermaid
+sequenceDiagram
+    participant U as User/Client
+    participant A as app.py (FastAPI)
+    participant M as Middleware (Auth/RateLimit)
+    participant E as RetrievalEngine (engine.py)
+    participant G as GuardrailEngine (engine.py)
+    participant C as Cache (TieredCache)
+    participant V as VectorStore (Qdrant)
+    participant L as LLMGateway (llm_gateway.py)
+
+    U->>A: POST /v1/retrieve (RetrievalRequest)
+    A->>M: Authenticate & Resolve TeamID
+    M->>E: retrieve(request, ctx)
+    
+    activate E
+    E->>G: input_rail.validate(query)
+    G-->>E: sanitized_query (or Violation)
+    
+    E->>E: classify_complexity(query)
+    
+    E->>C: get(query, team_id)
+    alt Cache Hit
+        C-->>E: RetrievalResponse
+        E-->>U: Final Answer (Cached)
+    else Cache Miss
+        E->>E: transform_query()
+        E->>V: search(vector, team_filter)
+        V-->>E: raw_chunks
+        
+        E->>E: crag_advisor_check(confidence)
+        
+        E->>L: generate(context, thinking_prompt)
+        L-->>E: llm_response (citations + text)
+        
+        E->>G: output_rail.validate(response)
+        G-->>E: clean_response
+        
+        E->>C: set(query, response)
+        E-->>U: Final Answer (Grounded)
+    end
+    deactivate E
+```
+
+### Technical Path Deep-Dive: Retrieval
+1.  **Entry**: `retrieve(request: RetrievalRequest, ctx: RequestContext)` in [`centrag/retrieval/engine.py`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/retrieval/engine.py).
+2.  **Adaptive Routing**: `_llm.classify_complexity` determines if the query is `SIMPLE` (cache-priority) or `COMPLEX` (triggered two-pass generation).
+3.  **Dual-Path Decision**: `QueryRouter` (in `retrieval/query_router.py`) evaluates if the query requires `PAGEINDEX` (structured navigation) or `VECTOR` (semantic proximity).
+4.  **CRAG Gate**: If `rerank_score < 0.3`, the engine triggers `QueryTransformer.transform` to generate synonym expansions before re-searching.
+
+---
+
+## 2. The Document Lifeline (Ingestion Sequence)
+
+How a raw document becomes searchable context.
+
+```mermaid
+sequenceDiagram
+    participant U as Admin/User
+    participant R as documents.py (Route)
+    participant W as IngestionWorker (worker.py)
+    participant S as IngestionService (service.py)
+    participant P as ExtractionPipeline (pipeline.py)
+    participant C as DocumentCleaner (cleaner.py)
+    participant T as TreeBuilder (pageindex_tree.py)
+    participant D as DocumentStore (S3/Local)
+
+    U->>R: POST /v1/documents (file_bytes)
+    R->>D: Initial Metadata Creation
+    R->>W: enqueue(job)
+    R-->>U: 202 Accepted (job_id)
+
+    W->>S: ingest(file_bytes, team_id)
+    activate S
+    S->>P: process(bytes)
+    P->>P: registry.get_parser(mime)
+    P-->>S: ExtractedDocument (Text + Pages)
+    
+    S->>C: clean(text)
+    C-->>S: CleaningResult (PII Redacted)
+    
+    par Dual Indexing
+        S->>T: build_tree(path)
+        T-->>S: tree_json (PageIndex)
+    and Vector Path
+        S->>S: chunk() & embed()
+        S->>S: vectorstore.upsert()
+    end
+    
+    S->>D: Final Update (Status=Ready)
+    deactivate S
+    W->>U: Webhook/Polling Completion
+```
+
+### Technical Path Deep-Dive: Ingestion
+1.  **Normalization**: `ParserRegistry` in [`extraction/parsers/base.py`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/extraction/parsers/base.py) selects the appropriate strategy (PDF, Text, HTML).
+2.  **PII Scrubbing**: `DocumentCleaner` applies 5 stages of normalization, including the `pii.redact_pii` call (14 distinct patterns).
+3.  **Security Hardening**: The `BM25SparseEmbedder` uses `hashlib.sha256` (NOT MD5) for deterministic token hashing to satisfy `CWE-327` requirements.
+4.  **Persistence**: `DocumentStore.store_document` in [`storage/document_store.py`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/storage/document_store.py) ensures atomic file writes before the index is allowed to mark the document as `Ready`.
+
+---
+
+## 3. Logical File Map & Roles
+
+| Directory | Role | Primary Protocols |
+| :--- | :--- | :--- |
+| [`abstractions/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/abstractions/) | Interface Definition | `Embedder`, `VectorStore`, `LLM`, `Guardrail` |
+| [`wiring.py`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/wiring.py) | Composition Root | Manual DI wiring of all factories |
+| [`implementations/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/implementations/) | Vendor Concrete Classes | `BedrockLLM`, `QdrantStore`, `OpenAIEmbedder` |
+| [`retrieval/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/retrieval/) | RAG Orchestration | `RetrievalEngine`, `TwoPassGenerator` |
+| [`guardrails/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/guardrails/) | Safety & Grounding | `PII`, `CostTracker`, `GuardrailEngine` |
+
+---
+
+## 4. Maintenance Rituals for AI Agents
+
+> [!CAUTION]
+> If you are an AI agent (Claude Code, Antigravity, etc.), you MUST follow this ritual after any code change to prevent documentation drift.
+
+1.  **Identify Blast Radius**: Run `python -m code_review_graph query --file <modified_file>` to see what depends on your change.
+2.  **Sync sessions**: Run `py centrag/scripts/sync_agentsview.py` to record the architectural intent in the AgentsView dashboard.
+3.  **Verify Flow**: If you added a new file/class, update sections 1, 2, or 3 of this document (`CODE_FLOW.md`) immediately.
+4.  **Rebuild Graph**: `python -m code_review_graph build --repo .` to update the structural database.

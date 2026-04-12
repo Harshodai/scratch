@@ -13,6 +13,7 @@ RAG Advancement: TEMPORAL MEMORY (Zep/Graphiti pattern, 2025)
     - Contradiction detection + resolution via temporal chaining
     - Decay scoring: unused memories gradually lose priority
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -22,10 +23,10 @@ from typing import Any, Protocol, runtime_checkable
 
 
 class MemoryType(str, Enum):
-    FACT = "fact"              # "Our primary database is CockroachDB"
+    FACT = "fact"  # "Our primary database is CockroachDB"
     PREFERENCE = "preference"  # "User prefers tables over charts"
-    EVENT = "event"            # "Migration completed on 2026-03-15"
-    RELATION = "relation"      # "Team Alpha owns Service X"
+    EVENT = "event"  # "Migration completed on 2026-03-15"
+    RELATION = "relation"  # "Team Alpha owns Service X"
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ class MemoryEntry:
     relevance_score: float
     valid_from: datetime
     valid_to: datetime | None  # None = currently valid
-    decay_score: float = 1.0   # 1.0 = fresh, approaches 0 = stale
+    decay_score: float = 1.0  # 1.0 = fresh, approaches 0 = stale
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property

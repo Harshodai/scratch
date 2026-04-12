@@ -20,13 +20,17 @@ Available implementations:
 
   Rerankers:
     - NoOpReranker:     Keyword overlap scoring (dev/test)
+
+  Extractors:
+    - LlamaParseExtractor: High-fidelity hierarchical parsing (production)
 """
 
+from centrag.implementations.bedrock_embedder import BedrockEmbedder
+from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
 from centrag.implementations.noop_embedder import NoOpEmbedder
-from centrag.implementations.noop_vectorstore import NoOpVectorStore
 from centrag.implementations.noop_llm import NoOpLLM
 from centrag.implementations.noop_reranker import NoOpReranker
-from centrag.implementations.bedrock_embedder import BedrockEmbedder
+from centrag.implementations.noop_vectorstore import NoOpVectorStore
 from centrag.implementations.openai_embedder import OpenAIEmbedder
 
 __all__ = [
@@ -38,5 +42,6 @@ __all__ = [
     # Production Embedders
     "BedrockEmbedder",
     "OpenAIEmbedder",
+    # Production Extractors
+    "LlamaParseExtractor",
 ]
-

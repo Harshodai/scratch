@@ -7,17 +7,17 @@ showing which path performs better on each quality dimension.
 
 Design Pattern: TEMPLATE METHOD — same evaluation flow, different paths.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from centrag.evaluation.judges import JudgeResult
-
 
 @dataclass(frozen=True)
 class PathScore:
     """Aggregate scores for a single retrieval path."""
+
     path: str
     case_count: int
     avg_composite: float
@@ -45,6 +45,7 @@ class ComparisonResult:
 
     Identifies the winner for each quality dimension and overall.
     """
+
     path_scores: list[PathScore] = field(default_factory=list)
     winner_overall: str = ""
     winner_faithfulness: str = ""
@@ -68,6 +69,7 @@ class ComparisonResult:
 @dataclass
 class _PathAccumulator:
     """Internal: accumulates scores for a path."""
+
     composites: list[float] = field(default_factory=list)
     faithfulness: list[float] = field(default_factory=list)
     relevance: list[float] = field(default_factory=list)
@@ -115,15 +117,17 @@ class PathComparator:
         scores: list[PathScore] = []
         for path, acc in self._paths.items():
             n = len(acc.composites)
-            scores.append(PathScore(
-                path=path,
-                case_count=n,
-                avg_composite=sum(acc.composites) / n if n else 0,
-                avg_faithfulness=sum(acc.faithfulness) / n if n else 0,
-                avg_relevance=sum(acc.relevance) / n if n else 0,
-                avg_coverage=sum(acc.coverage) / n if n else 0,
-                avg_latency_ms=sum(acc.latencies) / n if n else 0,
-            ))
+            scores.append(
+                PathScore(
+                    path=path,
+                    case_count=n,
+                    avg_composite=sum(acc.composites) / n if n else 0,
+                    avg_faithfulness=sum(acc.faithfulness) / n if n else 0,
+                    avg_relevance=sum(acc.relevance) / n if n else 0,
+                    avg_coverage=sum(acc.coverage) / n if n else 0,
+                    avg_latency_ms=sum(acc.latencies) / n if n else 0,
+                )
+            )
 
         def _best(key: str) -> str:
             return max(scores, key=lambda s: getattr(s, key)).path

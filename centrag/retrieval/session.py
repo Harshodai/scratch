@@ -14,6 +14,7 @@ Design Pattern: SESSION / UNIT OF WORK — track state across requests.
 SOLID: Single Responsibility — only session management. No retrieval logic.
 SOLID: Interface Segregation — separate from MemoryProtocol (long-term memory).
 """
+
 from __future__ import annotations
 
 import time
@@ -29,6 +30,7 @@ logger = get_logger("retrieval.session")
 
 class MessageRole(str, Enum):
     """Message roles in a conversation."""
+
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
@@ -37,6 +39,7 @@ class MessageRole(str, Enum):
 @dataclass
 class Message:
     """A single conversation message."""
+
     role: MessageRole
     content: str
     timestamp: float = field(default_factory=time.monotonic)
@@ -59,9 +62,10 @@ class Message:
 @dataclass
 class SessionConfig:
     """Configuration for conversation sessions."""
-    max_messages: int = 20         # Max messages per session
+
+    max_messages: int = 20  # Max messages per session
     max_context_tokens: int = 4000  # Token budget for context window
-    ttl_seconds: float = 3600.0    # Session expiry (1 hour)
+    ttl_seconds: float = 3600.0  # Session expiry (1 hour)
     system_prompt: str = (
         "You are a helpful document analysis assistant. "
         "Use the provided sources to answer questions accurately. "
@@ -117,11 +121,13 @@ class ConversationSession:
 
     def _add_message(self, role: MessageRole, content: str, metadata: dict) -> None:
         """Add a message and prune if over limits."""
-        self._messages.append(Message(
-            role=role,
-            content=content,
-            metadata=metadata,
-        ))
+        self._messages.append(
+            Message(
+                role=role,
+                content=content,
+                metadata=metadata,
+            )
+        )
         self._last_activity = time.monotonic()
         self._prune()
 
@@ -223,9 +229,7 @@ class SessionManager:
 
     def cleanup_expired(self) -> int:
         """Remove all expired sessions. Returns count removed."""
-        expired = [
-            sid for sid, s in self._sessions.items() if s.is_expired
-        ]
+        expired = [sid for sid, s in self._sessions.items() if s.is_expired]
         for sid in expired:
             del self._sessions[sid]
         if expired:

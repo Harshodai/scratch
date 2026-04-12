@@ -6,22 +6,20 @@ FREE: No external services needed. Logs everything to structlog.
 Use as a starting point, then swap to OpenTelemetry or Langfuse
 in production without changing any calling code (Strategy pattern).
 """
+
 from __future__ import annotations
 
 import time
 from collections import defaultdict
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
-
-from centrag.utils.logger import get_logger
+from typing import Any
 
 from centrag.observability import (
-    TracingProtocol,
-    MetricsProtocol,
-    CostTrackingProtocol,
     SpanContext,
     SpanKind,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("observability.console")
 
@@ -148,10 +146,7 @@ class ConsoleCostTracker:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         pricing = self.PRICING.get(model, {"input": 0.0, "output": 0.0})
-        cost = (
-            input_tokens * pricing.get("input", 0) +
-            output_tokens * pricing.get("output", 0)
-        ) / 1_000_000
+        cost = (input_tokens * pricing.get("input", 0) + output_tokens * pricing.get("output", 0)) / 1_000_000
 
         self._usage[model]["input_tokens"] += input_tokens
         self._usage[model]["output_tokens"] += output_tokens

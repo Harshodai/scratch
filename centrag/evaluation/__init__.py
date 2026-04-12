@@ -9,15 +9,16 @@ Components:
     - Metrics: aggregate statistics and per-case breakdowns
     - Comparator: side-by-side path comparison (pageindex vs vector vs hybrid)
 """
+
+from centrag.evaluation.comparator import ComparisonResult, PathComparator
 from centrag.evaluation.dataset import GoldenDataset, TestCase
 from centrag.evaluation.judges import (
-    FaithfulnessJudge,
-    RelevanceJudge,
     CoverageJudge,
+    FaithfulnessJudge,
     JudgeResult,
+    RelevanceJudge,
 )
 from centrag.evaluation.metrics import EvaluationMetrics, EvaluationReport
-from centrag.evaluation.comparator import PathComparator, ComparisonResult
 
 __all__ = [
     "GoldenDataset",

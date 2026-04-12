@@ -14,24 +14,25 @@ Design Pattern: STRATEGY PATTERN — the router selects the retrieval strategy.
 SOLID: Single Responsibility — only routing decisions. No retrieval logic.
 SOLID: Open/Closed — add new routing heuristics without modifying retrieval code.
 """
+
 from __future__ import annotations
 
-from enum import Enum
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
 from centrag.storage.document_store import DocumentStore
+from centrag.utils.logger import get_logger
 
 logger = get_logger("retrieval.router")
 
 
 class RetrievalPath(str, Enum):
     """The retrieval path selected by the router."""
-    VECTOR = "vector"          # Similarity-based (embeddings + Qdrant)
-    PAGEINDEX = "pageindex"    # Reasoning-based (tree navigation via LLM)
-    HYBRID = "hybrid"          # Both paths + Reciprocal Rank Fusion
+
+    VECTOR = "vector"  # Similarity-based (embeddings + Qdrant)
+    PAGEINDEX = "pageindex"  # Reasoning-based (tree navigation via LLM)
+    HYBRID = "hybrid"  # Both paths + Reciprocal Rank Fusion
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class RoutingDecision:
 
     Explains WHY a path was chosen (for observability and debugging).
     """
+
     path: RetrievalPath
     reason: str
     confidence: float = 1.0
@@ -71,17 +73,40 @@ class QueryRouter:
     """
 
     # Keywords that suggest structured document navigation
-    _STRUCTURED_KEYWORDS = frozenset({
-        "section", "chapter", "table", "figure", "appendix",
-        "page", "heading", "paragraph", "summary", "conclusion",
-        "introduction", "abstract", "findings", "recommendation",
-    })
+    _STRUCTURED_KEYWORDS = frozenset(
+        {
+            "section",
+            "chapter",
+            "table",
+            "figure",
+            "appendix",
+            "page",
+            "heading",
+            "paragraph",
+            "summary",
+            "conclusion",
+            "introduction",
+            "abstract",
+            "findings",
+            "recommendation",
+        }
+    )
 
     # Keywords that suggest cross-document or factual search
-    _FACTUAL_KEYWORDS = frozenset({
-        "compare", "across", "all documents", "every", "between",
-        "list all", "how many", "what is", "define", "who",
-    })
+    _FACTUAL_KEYWORDS = frozenset(
+        {
+            "compare",
+            "across",
+            "all documents",
+            "every",
+            "between",
+            "list all",
+            "how many",
+            "what is",
+            "define",
+            "who",
+        }
+    )
 
     def __init__(self, document_store: DocumentStore) -> None:
         self._store = document_store

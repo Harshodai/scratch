@@ -7,13 +7,15 @@ Verifies:
     - Query classification (structured vs factual vs complex)
     - Cross-document routing (always vector)
 """
+
 from __future__ import annotations
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 
-from centrag.retrieval.query_router import QueryRouter, RetrievalPath, RoutingDecision
+import pytest
+
+from centrag.retrieval.query_router import QueryRouter, RetrievalPath
 from centrag.storage.document_store import DocumentStore
 
 
@@ -27,6 +29,7 @@ def tmp_store():
 
 
 # ── Explicit Mode Overrides ────────────────────────────────────────
+
 
 class TestExplicitMode:
     """User explicitly selects a mode — no auto-routing."""
@@ -59,6 +62,7 @@ class TestExplicitMode:
 
 # ── Auto-Routing Based on Document State ────────────────────────────
 
+
 class TestAutoRouting:
     """Auto mode selects path based on what's available."""
 
@@ -66,13 +70,17 @@ class TestAutoRouting:
     async def test_tree_only_routes_pageindex(self, tmp_store):
         """Doc with tree but no vectors → PAGEINDEX."""
         await tmp_store.store_document(
-            team_id="t1", filename="doc.pdf",
-            content_type="application/pdf", cleaned_text="text",
+            team_id="t1",
+            filename="doc.pdf",
+            content_type="application/pdf",
+            cleaned_text="text",
             doc_id="doc-1",
         )
         await tmp_store.update_meta(
-            team_id="t1", doc_id="doc-1",
-            tree_available=True, vectors_available=False,
+            team_id="t1",
+            doc_id="doc-1",
+            tree_available=True,
+            vectors_available=False,
             status="ready",
         )
 
@@ -102,13 +110,17 @@ class TestAutoRouting:
     async def test_both_available_structured_query(self, tmp_store):
         """Doc with both paths + structured query → PAGEINDEX."""
         await tmp_store.store_document(
-            team_id="t1", filename="doc.pdf",
-            content_type="application/pdf", cleaned_text="text",
+            team_id="t1",
+            filename="doc.pdf",
+            content_type="application/pdf",
+            cleaned_text="text",
             doc_id="doc-2",
         )
         await tmp_store.update_meta(
-            team_id="t1", doc_id="doc-2",
-            tree_available=True, vectors_available=True,
+            team_id="t1",
+            doc_id="doc-2",
+            tree_available=True,
+            vectors_available=True,
         )
 
         router = QueryRouter(tmp_store)
@@ -125,13 +137,17 @@ class TestAutoRouting:
     async def test_both_available_factual_query(self, tmp_store):
         """Doc with both paths + factual query → VECTOR."""
         await tmp_store.store_document(
-            team_id="t1", filename="doc.pdf",
-            content_type="application/pdf", cleaned_text="text",
+            team_id="t1",
+            filename="doc.pdf",
+            content_type="application/pdf",
+            cleaned_text="text",
             doc_id="doc-3",
         )
         await tmp_store.update_meta(
-            team_id="t1", doc_id="doc-3",
-            tree_available=True, vectors_available=True,
+            team_id="t1",
+            doc_id="doc-3",
+            tree_available=True,
+            vectors_available=True,
         )
 
         router = QueryRouter(tmp_store)
@@ -147,13 +163,17 @@ class TestAutoRouting:
     async def test_no_tree_fallback_to_vector(self, tmp_store):
         """Doc with no tree → fallback to VECTOR."""
         await tmp_store.store_document(
-            team_id="t1", filename="doc.pdf",
-            content_type="application/pdf", cleaned_text="text",
+            team_id="t1",
+            filename="doc.pdf",
+            content_type="application/pdf",
+            cleaned_text="text",
             doc_id="doc-4",
         )
         await tmp_store.update_meta(
-            team_id="t1", doc_id="doc-4",
-            tree_available=False, vectors_available=True,
+            team_id="t1",
+            doc_id="doc-4",
+            tree_available=False,
+            vectors_available=True,
         )
 
         router = QueryRouter(tmp_store)
@@ -168,6 +188,7 @@ class TestAutoRouting:
 
 
 # ── Query Classification ───────────────────────────────────────────
+
 
 class TestQueryClassification:
     """Heuristic query classifier tests."""

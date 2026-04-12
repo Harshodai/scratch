@@ -7,17 +7,16 @@ Best for: hot queries that repeat within a single server instance.
 This moves the implementation logic that was mixed into
 centrag/abstractions/cache.py (violating protocol/impl separation).
 """
+
 from __future__ import annotations
 
 import hashlib
-import time
 from collections import defaultdict
 from typing import Any
 
 from cachetools import TTLCache
 
-from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
-
+from centrag.abstractions.cache import CacheResult, CacheTier
 from centrag.utils.logger import get_logger
 
 logger = get_logger("cache.l1")
@@ -42,13 +41,14 @@ class L1InMemoryCache:
         # Track which cache keys belong to which team for scoped invalidation
         self._team_keys: dict[str, set[str]] = defaultdict(set)
 
-    def _make_key(self, key: str, team_id: str) -> str:
-        """Deterministic cache key scoped by team."""
-        raw = f"{team_id}:{key}"
+    def _make_key(self, key: str, team_id: str, namespace: str | None = None) -> str:
+        """Deterministic cache key scoped by team and optional namespace."""
+        namespace_prefix = f"{namespace}:" if namespace else ""
+        raw = f"{team_id}:{namespace_prefix}{key}"
         return hashlib.sha256(raw.encode()).hexdigest()
 
-    async def get(self, key: str, team_id: str) -> CacheResult:
-        cache_key = self._make_key(key, team_id)
+    async def get(self, key: str, team_id: str, namespace: str | None = None) -> CacheResult:
+        cache_key = self._make_key(key, team_id, namespace=namespace)
         value = self._cache.get(cache_key)
         if value is not None:
             logger.debug("l1_cache_hit", team_id=team_id, key_hash=cache_key[:12])
@@ -61,8 +61,9 @@ class L1InMemoryCache:
         value: Any,
         team_id: str,
         ttl_seconds: int = 3600,
+        namespace: str | None = None,
     ) -> None:
-        cache_key = self._make_key(key, team_id)
+        cache_key = self._make_key(key, team_id, namespace=namespace)
         self._cache[cache_key] = value
         self._team_keys[team_id].add(cache_key)
         logger.debug("l1_cache_set", team_id=team_id, key_hash=cache_key[:12])

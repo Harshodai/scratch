@@ -24,21 +24,21 @@ Architecture:
 
 Each rail is independently testable, configurable, and toggleable.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
 from centrag.abstractions.guardrail import (
+    GuardrailViolation,
     InputRailProtocol,
     OutputRailProtocol,
     RailContext,
-    GuardrailViolation,
 )
-from centrag.guardrails.pii import PII_PATTERNS, redact_pii, detect_pii
+from centrag.guardrails.pii import detect_pii, redact_pii
+from centrag.utils.logger import get_logger
 
 logger = get_logger("guardrails.engine")
 
@@ -47,12 +47,14 @@ logger = get_logger("guardrails.engine")
 # Configuration — Policy-as-Code
 # =============================================================================
 
+
 @dataclass(frozen=True)
 class GuardrailsConfig:
     """
     Complete guardrails configuration. Previously declared but unused (L328-335).
     Now actually wired into GuardrailEngine.
     """
+
     # Input validation
     max_query_length: int = 2000
     min_query_length: int = 3
@@ -71,26 +73,31 @@ class GuardrailsConfig:
     enable_blocked_pattern_filter: bool = True
 
     # Prompt injection patterns
-    blocked_input_patterns: list[str] = field(default_factory=lambda: [
-        r"ignore\s+(?:previous|all|above)\s+instructions",
-        r"system\s*prompt",
-        r"you\s+are\s+now",
-        r"reveal\s+(?:your|the)\s+(?:system|initial)",
-        r"<\s*script",
-        r"(?:DROP|DELETE|TRUNCATE)\s+TABLE",
-        r"UNION\s+SELECT",
-    ])
+    blocked_input_patterns: list[str] = field(
+        default_factory=lambda: [
+            r"ignore\s+(?:previous|all|above)\s+instructions",
+            r"system\s*prompt",
+            r"you\s+are\s+now",
+            r"reveal\s+(?:your|the)\s+(?:system|initial)",
+            r"<\s*script",
+            r"(?:DROP|DELETE|TRUNCATE)\s+TABLE",
+            r"UNION\s+SELECT",
+        ]
+    )
 
     # Blocked output patterns (LLM leaks)
-    blocked_output_patterns: list[str] = field(default_factory=lambda: [
-        r"as\s+an\s+ai\s+(?:language\s+)?model",
-        r"I\s+(?:cannot|can't)\s+access",
-    ])
+    blocked_output_patterns: list[str] = field(
+        default_factory=lambda: [
+            r"as\s+an\s+ai\s+(?:language\s+)?model",
+            r"I\s+(?:cannot|can't)\s+access",
+        ]
+    )
 
 
 # =============================================================================
 # Input Rails
 # =============================================================================
+
 
 class PromptInjectionRail:
     """Detect and block prompt injection attempts."""
@@ -133,13 +140,9 @@ class InputLengthRail:
     async def validate(self, query: str, context: RailContext) -> str:
         stripped = query.strip()
         if len(stripped) < self._min:
-            raise GuardrailViolation(
-                self.name, f"Query too short (minimum {self._min} characters)."
-            )
+            raise GuardrailViolation(self.name, f"Query too short (minimum {self._min} characters).")
         if len(stripped) > self._max:
-            raise GuardrailViolation(
-                self.name, f"Query too long (maximum {self._max} characters)."
-            )
+            raise GuardrailViolation(self.name, f"Query too long (maximum {self._max} characters).")
         return stripped
 
 
@@ -196,14 +199,11 @@ class BudgetGateRail:
         if self._tracker is None:
             return query  # No tracker configured, skip
 
-        within_budget = await self._tracker.check_budget(
-            context.team_id, context.tier
-        )
+        within_budget = await self._tracker.check_budget(context.team_id, context.tier)
         if not within_budget:
             raise GuardrailViolation(
                 self.name,
-                f"Token budget exceeded for tier '{context.tier}'. "
-                f"Please upgrade or wait for the next billing period.",
+                f"Token budget exceeded for tier '{context.tier}'. Please upgrade or wait for the next billing period.",
                 severity="block",
             )
         return query
@@ -212,6 +212,7 @@ class BudgetGateRail:
 # =============================================================================
 # Output Rails
 # =============================================================================
+
 
 class ResponseLengthRail:
     """Truncate overlong responses."""
@@ -223,11 +224,9 @@ class ResponseLengthRail:
     def name(self) -> str:
         return "response_length"
 
-    async def validate(
-        self, answer: str, sources: list[Any], context: RailContext
-    ) -> str:
+    async def validate(self, answer: str, sources: list[Any], context: RailContext) -> str:
         if len(answer) > self._max:
-            return answer[:self._max] + "\n\n[Response truncated]"
+            return answer[: self._max] + "\n\n[Response truncated]"
         return answer
 
 
@@ -241,9 +240,7 @@ class ConfidenceGateRail:
     def name(self) -> str:
         return "confidence_gate"
 
-    async def validate(
-        self, answer: str, sources: list[Any], context: RailContext
-    ) -> str:
+    async def validate(self, answer: str, sources: list[Any], context: RailContext) -> str:
         if not sources:
             return (
                 "I could not find relevant sources to answer this question confidently. "
@@ -251,10 +248,7 @@ class ConfidenceGateRail:
             )
 
         # Calculate average confidence from sources
-        scores = [
-            s.relevance_score for s in sources
-            if hasattr(s, "relevance_score")
-        ]
+        scores = [s.relevance_score for s in sources if hasattr(s, "relevance_score")]
         if scores:
             avg = sum(scores) / len(scores)
             if avg < self._threshold:
@@ -272,9 +266,7 @@ class OutputPIIRedactionRail:
     def name(self) -> str:
         return "output_pii_redaction"
 
-    async def validate(
-        self, answer: str, sources: list[Any], context: RailContext
-    ) -> str:
+    async def validate(self, answer: str, sources: list[Any], context: RailContext) -> str:
         return redact_pii(answer)
 
 
@@ -288,9 +280,7 @@ class BlockedPatternRail:
     def name(self) -> str:
         return "blocked_pattern"
 
-    async def validate(
-        self, answer: str, sources: list[Any], context: RailContext
-    ) -> str:
+    async def validate(self, answer: str, sources: list[Any], context: RailContext) -> str:
         for pattern in self._patterns:
             answer = pattern.sub("[REDACTED]", answer)
         return answer
@@ -299,6 +289,7 @@ class BlockedPatternRail:
 # =============================================================================
 # GuardrailEngine — Composite
 # =============================================================================
+
 
 class GuardrailEngine:
     """
@@ -324,35 +315,23 @@ class GuardrailEngine:
         cfg = self.config
 
         # Input rails (order matters)
-        self._input_rails.append(
-            InputLengthRail(cfg.min_query_length, cfg.max_query_length)
-        )
+        self._input_rails.append(InputLengthRail(cfg.min_query_length, cfg.max_query_length))
         if cfg.enable_prompt_injection_detection:
-            self._input_rails.append(
-                PromptInjectionRail(cfg.blocked_input_patterns)
-            )
+            self._input_rails.append(PromptInjectionRail(cfg.blocked_input_patterns))
         if cfg.enable_namespace_access_control and cfg.allowed_namespaces:
-            self._input_rails.append(
-                NamespaceAccessRail(cfg.allowed_namespaces)
-            )
+            self._input_rails.append(NamespaceAccessRail(cfg.allowed_namespaces))
         if cfg.enable_input_pii_detection:
             self._input_rails.append(InputPIIDetectionRail())
         if cfg.enable_budget_gate:
             self._input_rails.append(BudgetGateRail())
 
         # Output rails (order matters)
-        self._output_rails.append(
-            ResponseLengthRail(cfg.max_response_length)
-        )
-        self._output_rails.append(
-            ConfidenceGateRail(cfg.min_confidence_threshold)
-        )
+        self._output_rails.append(ResponseLengthRail(cfg.max_response_length))
+        self._output_rails.append(ConfidenceGateRail(cfg.min_confidence_threshold))
         if cfg.enable_output_pii_redaction:
             self._output_rails.append(OutputPIIRedactionRail())
         if cfg.enable_blocked_pattern_filter:
-            self._output_rails.append(
-                BlockedPatternRail(cfg.blocked_output_patterns)
-            )
+            self._output_rails.append(BlockedPatternRail(cfg.blocked_output_patterns))
 
     @property
     def input_rails(self) -> list[InputRailProtocol]:

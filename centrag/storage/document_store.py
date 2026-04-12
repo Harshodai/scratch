@@ -21,14 +21,14 @@ SOLID: Single Responsibility — only handles document storage/retrieval.
 SOLID: Open/Closed — to add S3 support, create a new DocumentStore
        implementation, don't modify this one.
 """
+
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,17 +46,18 @@ class DocumentMeta:
     (tree_available, vectors_available) is populated by DocumentStore
     itself; the ingestion service sets them after each path completes.
     """
+
     doc_id: str
     team_id: str
     filename: str
     content_type: str
-    status: str = "pending"               # "pending" | "processing" | "ready" | "failed"
+    status: str = "pending"  # "pending" | "processing" | "ready" | "failed"
     namespace: str = "default"
     page_count: int = 0
-    tree_node_count: int = 0              # VECTORLESS path: number of tree nodes
-    chunk_count: int = 0                  # VECTOR path: number of chunks
-    tree_available: bool = False          # VECTORLESS path: tree index built?
-    vectors_available: bool = False       # VECTOR path: vectors in Qdrant?
+    tree_node_count: int = 0  # VECTORLESS path: number of tree nodes
+    chunk_count: int = 0  # VECTOR path: number of chunks
+    tree_available: bool = False  # VECTORLESS path: tree index built?
+    vectors_available: bool = False  # VECTOR path: vectors in Qdrant?
     created_at: str = ""
     updated_at: str = ""
     user_metadata: dict[str, Any] = field(default_factory=dict)
@@ -67,7 +68,7 @@ class DocumentMeta:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DocumentMeta":
+    def from_dict(cls, data: dict[str, Any]) -> DocumentMeta:
         """Deserialize from JSON."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
@@ -116,7 +117,7 @@ class DocumentStore:
         path-specific indexing (tree building or vector embedding).
         """
         doc_id = doc_id or str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         doc_dir = self._doc_dir(team_id, doc_id)
         doc_dir.mkdir(parents=True, exist_ok=True)
@@ -172,7 +173,7 @@ class DocumentStore:
 
         meta_dict = meta.to_dict()
         meta_dict.update(updates)
-        meta_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+        meta_dict["updated_at"] = datetime.now(UTC).isoformat()
 
         updated = DocumentMeta.from_dict(meta_dict)
 
@@ -238,9 +239,7 @@ class DocumentStore:
             pages=len(page_cache),
         )
 
-    async def get_pageindex_tree(
-        self, team_id: str, doc_id: str
-    ) -> dict[str, Any] | None:
+    async def get_pageindex_tree(self, team_id: str, doc_id: str) -> dict[str, Any] | None:
         """
         Get the PageIndex tree structure.
 
@@ -251,9 +250,7 @@ class DocumentStore:
             return None
         return json.loads(tree_path.read_text(encoding="utf-8"))
 
-    async def get_page_cache(
-        self, team_id: str, doc_id: str
-    ) -> list[dict[str, Any]] | None:
+    async def get_page_cache(self, team_id: str, doc_id: str) -> list[dict[str, Any]] | None:
         """
         Get the page content cache.
 
@@ -287,11 +284,7 @@ class DocumentStore:
 
         page_nums = self._parse_pages(pages)
         page_map = {p["page"]: p["content"] for p in cache}
-        return [
-            {"page": p, "content": page_map[p]}
-            for p in page_nums
-            if p in page_map
-        ]
+        return [{"page": p, "content": page_map[p]} for p in page_nums if p in page_map]
 
     # ── VECTOR Path Artifacts ───────────────────────────────────────
 
@@ -314,9 +307,7 @@ class DocumentStore:
         )
         logger.info("chunks_stored", doc_id=doc_id, count=len(chunks))
 
-    async def get_chunks(
-        self, team_id: str, doc_id: str
-    ) -> list[dict[str, Any]] | None:
+    async def get_chunks(self, team_id: str, doc_id: str) -> list[dict[str, Any]] | None:
         """
         Get chunk metadata for a document.
 

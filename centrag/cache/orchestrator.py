@@ -10,13 +10,13 @@ Design: CHAIN OF RESPONSIBILITY
 
 This replaces the mixed protocol+implementation in abstractions/cache.py.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
 from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
+from centrag.utils.logger import get_logger
 
 logger = get_logger("cache.orchestrator")
 
@@ -47,7 +47,7 @@ class TieredCacheOrchestrator:
         """Add a cache tier to the chain."""
         self._tiers.append(cache)
 
-    async def get(self, key: str, team_id: str) -> CacheResult:
+    async def get(self, key: str, team_id: str, namespace: str | None = None) -> CacheResult:
         """
         Try each tier in order. Return on first hit.
 
@@ -55,7 +55,7 @@ class TieredCacheOrchestrator:
         for faster subsequent lookups.
         """
         for i, tier in enumerate(self._tiers):
-            result = await tier.get(key, team_id)
+            result = await tier.get(key, team_id, namespace=namespace)
             if result.hit:
                 logger.info(
                     "cache_hit",
@@ -65,7 +65,7 @@ class TieredCacheOrchestrator:
                 )
                 # Backfill higher tiers
                 for j in range(i):
-                    await self._tiers[j].set(key, result.value, team_id)
+                    await self._tiers[j].set(key, result.value, team_id, namespace=namespace)
                 return result
 
         return CacheResult(hit=False, tier=CacheTier.MISS)
@@ -76,11 +76,12 @@ class TieredCacheOrchestrator:
         value: Any,
         team_id: str,
         ttl_seconds: int = 3600,
+        namespace: str | None = None,
     ) -> None:
         """Write-through: set in ALL tiers."""
         for tier in self._tiers:
             try:
-                await tier.set(key, value, team_id, ttl_seconds)
+                await tier.set(key, value, team_id, ttl_seconds, namespace=namespace)
             except Exception as e:
                 logger.warning(
                     "cache_set_error",

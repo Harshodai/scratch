@@ -12,6 +12,7 @@ Design Pattern: STRATEGY — judges are interchangeable, composable.
 SOLID: Single Responsibility — each judge evaluates ONE quality dimension.
 SOLID: Open/Closed — add new judges without modifying existing ones.
 """
+
 from __future__ import annotations
 
 import re
@@ -22,8 +23,9 @@ from typing import Any, Protocol, runtime_checkable
 @dataclass(frozen=True)
 class JudgeResult:
     """Result from a single judge evaluation."""
+
     judge_name: str
-    score: float              # 0.0 (bad) to 1.0 (perfect)
+    score: float  # 0.0 (bad) to 1.0 (perfect)
     reasoning: str
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -130,16 +132,75 @@ class FaithfulnessJudge:
     def _extract_content_words(text: str) -> list[str]:
         """Extract meaningful content words (skip stopwords)."""
         stopwords = {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been",
-            "being", "have", "has", "had", "do", "does", "did", "will",
-            "would", "could", "should", "may", "might", "can", "shall",
-            "in", "on", "at", "to", "for", "of", "with", "by", "from",
-            "and", "or", "but", "not", "no", "if", "then", "so", "as",
-            "that", "this", "it", "its", "they", "their", "them", "we",
-            "our", "you", "your", "i", "my", "me", "he", "she", "his",
-            "her", "what", "which", "who", "where", "when", "how", "why",
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "can",
+            "shall",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "and",
+            "or",
+            "but",
+            "not",
+            "no",
+            "if",
+            "then",
+            "so",
+            "as",
+            "that",
+            "this",
+            "it",
+            "its",
+            "they",
+            "their",
+            "them",
+            "we",
+            "our",
+            "you",
+            "your",
+            "i",
+            "my",
+            "me",
+            "he",
+            "she",
+            "his",
+            "her",
+            "what",
+            "which",
+            "who",
+            "where",
+            "when",
+            "how",
+            "why",
         }
-        words = re.findall(r'\b[a-z]{3,}\b', text.lower())
+        words = re.findall(r"\b[a-z]{3,}\b", text.lower())
         return [w for w in words if w not in stopwords]
 
 

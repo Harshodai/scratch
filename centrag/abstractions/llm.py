@@ -11,19 +11,21 @@ RAG Advancement: ADAPTIVE RETRIEVAL (2025-2026)
     - classify_complexity() lets the system route simple queries to cheaper models
     - and complex queries to frontier models (Claude 3.5 Sonnet vs Haiku)
 """
+
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class QueryComplexity(str, Enum):
     """Used by Adaptive RAG to route queries to appropriate models."""
 
-    SIMPLE = "simple"      # Direct factual — use fast/cheap model or cache
+    SIMPLE = "simple"  # Direct factual — use fast/cheap model or cache
     MODERATE = "moderate"  # Needs retrieval — standard RAG
-    COMPLEX = "complex"    # Multi-hop reasoning — frontier model + iterative
+    COMPLEX = "complex"  # Multi-hop reasoning — frontier model + iterative
 
 
 @dataclass(frozen=True)
@@ -85,4 +87,3 @@ class LLMProtocol(Protocol):
         so implementations may omit this for batch-only providers.
         """
         ...
-

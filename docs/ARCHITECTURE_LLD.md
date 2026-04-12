@@ -379,7 +379,8 @@ centrag/
 │   ├── chunkers/                  # Chunking strategies (pluggable)
 │   │   ├── semantic_chunker.py
 │   │   ├── fixed_chunker.py
-│   │   └── parent_child_chunker.py
+│   │   ├── parent_child_chunker.py
+│   │   └── proposition_chunker.py  # Atomic fact extraction (PoC)
 │   ├── embedders/                 # Embedding backends (pluggable)
 │   │   ├── bedrock_embedder.py
 │   │   ├── openai_embedder.py

@@ -6,11 +6,11 @@ based on simple keyword overlap with the query.
 
 Production replacement: CohereReranker, CrossEncoderReranker.
 """
+
 from __future__ import annotations
 
+from centrag.abstractions.reranker import RerankResult
 from centrag.utils.logger import get_logger
-
-from centrag.abstractions.reranker import RerankerProtocol, RerankResult
 
 logger = get_logger("implementations.reranker.noop")
 

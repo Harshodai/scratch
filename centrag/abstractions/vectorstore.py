@@ -9,6 +9,7 @@ Design Pattern: REPOSITORY PATTERN
     - Encapsulates data access behind a clean interface
     - Business logic never knows if it's talking to Qdrant or Pinecone
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -35,9 +36,7 @@ class VectorFilter:
     @staticmethod
     def for_team(team_id: str) -> VectorFilter:
         """Factory: create a filter scoped to a single team."""
-        return VectorFilter(
-            must=[{"key": "team_id", "match": {"value": team_id}}]
-        )
+        return VectorFilter(must=[{"key": "team_id", "match": {"value": team_id}}])
 
     def with_condition(self, key: str, value: Any) -> VectorFilter:
         """Builder: add a condition (returns new VectorFilter — immutable)."""

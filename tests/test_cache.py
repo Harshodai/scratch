@@ -6,20 +6,21 @@ Tests:
   - TieredCacheOrchestrator: fallthrough, backfill
   - RetrievalResponse serialization roundtrip
 """
+
 from __future__ import annotations
 
 import pytest
 
+from centrag.abstractions.cache import CacheTier
+from centrag.abstractions.llm import QueryComplexity
 from centrag.cache.l1_memory import L1InMemoryCache
 from centrag.cache.orchestrator import TieredCacheOrchestrator
-from centrag.abstractions.cache import CacheTier
 from centrag.retrieval.engine import RetrievalResponse, SourceChunk
-from centrag.abstractions.llm import QueryComplexity
-
 
 # =============================================================================
 # L1InMemoryCache
 # =============================================================================
+
 
 class TestL1InMemoryCache:
     @pytest.fixture
@@ -70,6 +71,7 @@ class TestL1InMemoryCache:
 # TieredCacheOrchestrator
 # =============================================================================
 
+
 class TestTieredCacheOrchestrator:
     @pytest.mark.asyncio
     async def test_l1_hit(self):
@@ -92,6 +94,7 @@ class TestTieredCacheOrchestrator:
 # =============================================================================
 # RetrievalResponse Serialization
 # =============================================================================
+
 
 class TestRetrievalResponseSerialization:
     def test_roundtrip(self):

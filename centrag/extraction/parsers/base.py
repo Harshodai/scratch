@@ -9,17 +9,14 @@ Design Pattern: STRATEGY + REGISTRY
 SOLID: Open/Closed — add new formats by creating a new parser file
        and decorating the class. No changes to existing code.
 """
+
 from __future__ import annotations
-
-from typing import ClassVar
-
-from centrag.utils.logger import get_logger
 
 from centrag.abstractions.extractor import (
     ContentType,
-    ExtractedDocument,
     ExtractorProtocol,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("extraction.parsers")
 

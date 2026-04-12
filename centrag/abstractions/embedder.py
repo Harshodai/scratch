@@ -13,6 +13,7 @@ RAG Advancement: LATE CHUNKING (2025)
     - This preserves cross-chunk context (pronouns, references).
     - See: Jina AI Late Chunking paper (arxiv.org/abs/2409.04701)
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
@@ -64,7 +65,7 @@ class SparseEmbedderProtocol(Protocol):
     async def embed_sparse(self, text: str) -> dict[int, float]:
         """
         Embed a string into a sparse vector mapping.
-        
+
         Returns:
             A dictionary where keys are token indices and values are their weights.
         """

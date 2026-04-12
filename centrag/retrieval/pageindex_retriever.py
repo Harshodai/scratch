@@ -27,6 +27,7 @@ core difference from vector retrieval:
 Design Pattern: STRATEGY — pluggable retriever, selected by QueryRouter.
 SOLID: Single Responsibility — only does tree-based retrieval.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,10 +35,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
-from centrag.abstractions.tree_index import TreeIndexProtocol, PageContent
+from centrag.abstractions.tree_index import TreeIndexProtocol
 from centrag.storage.document_store import DocumentStore
+from centrag.utils.logger import get_logger
 
 logger = get_logger("retrieval.pageindex")
 
@@ -86,13 +86,14 @@ class PageIndexRetrievalResult:
     Includes the reasoning trace from tree navigation, making the
     retrieval explainable — you can see WHY these pages were selected.
     """
-    content: str                           # Extracted page content
-    source: str = "pageindex"              # Always "pageindex" for this retriever
+
+    content: str  # Extracted page content
+    source: str = "pageindex"  # Always "pageindex" for this retriever
     doc_id: str = ""
     section_title: str = ""
-    page_refs: str = ""                    # e.g. "5-7, 22-28"
-    relevance_score: float = 0.0           # From LLM confidence
-    reasoning: str = ""                    # LLM's navigation reasoning
+    page_refs: str = ""  # e.g. "5-7, 22-28"
+    relevance_score: float = 0.0  # From LLM confidence
+    reasoning: str = ""  # LLM's navigation reasoning
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -194,10 +195,7 @@ class PageIndexRetriever:
             return []
 
         # 5. Build results
-        combined_content = "\n\n".join(
-            f"--- Page {pc['page']} ---\n{pc['content']}"
-            for pc in page_contents
-        )
+        combined_content = "\n\n".join(f"--- Page {pc['page']} ---\n{pc['content']}" for pc in page_contents)
 
         result = PageIndexRetrievalResult(
             content=combined_content,
@@ -380,7 +378,5 @@ class PageIndexRetriever:
             children = tree.get("nodes", [])
             if not children:
                 return 1
-            return 1 + max(
-                PageIndexRetriever._count_tree_depth(c) for c in children
-            )
+            return 1 + max(PageIndexRetriever._count_tree_depth(c) for c in children)
         return 0

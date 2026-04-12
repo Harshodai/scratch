@@ -16,6 +16,7 @@ IMPORTANT: Late Chunking is NOT a chunking strategy — it's an EMBEDDING strate
     The existing EmbedderProtocol.embed_with_late_chunking() handles this.
     The chunker provides chunk_boundaries to the embedder.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -25,10 +26,12 @@ from typing import Any, Protocol, runtime_checkable
 
 class ChunkingStrategy(str, Enum):
     """Available chunking strategies."""
-    FIXED = "fixed"                      # Fixed-size with overlap (baseline)
-    RECURSIVE = "recursive"              # Recursive text splitting (LangChain-style)
-    SEMANTIC = "semantic"                # Embedding-based semantic boundary detection
+
+    FIXED = "fixed"  # Fixed-size with overlap (baseline)
+    RECURSIVE = "recursive"  # Recursive text splitting (LangChain-style)
+    SEMANTIC = "semantic"  # Embedding-based semantic boundary detection
     STRUCTURE_AWARE = "structure_aware"  # Header/section-aware splitting
+    PROPOSITION = "proposition"  # Atomic fact extraction (RAG Made Simple Ch 4)
 
 
 @dataclass(frozen=True)
@@ -39,16 +42,19 @@ class ChunkingConfig:
     Policy-as-code: these settings control chunk size, overlap,
     and strategy selection per document or globally.
     """
+
     strategy: ChunkingStrategy = ChunkingStrategy.RECURSIVE
-    chunk_size: int = 512          # Target tokens per chunk
-    chunk_overlap: int = 64        # Token overlap between adjacent chunks
-    min_chunk_size: int = 50       # Skip chunks smaller than this
-    max_chunk_size: int = 1024     # Hard cap — never exceed this
+    chunk_size: int = 512  # Target tokens per chunk
+    chunk_overlap: int = 64  # Token overlap between adjacent chunks
+    min_chunk_size: int = 50  # Skip chunks smaller than this
+    max_chunk_size: int = 1024  # Hard cap — never exceed this
     # Semantic chunking specific
     similarity_threshold: float = 0.5  # Split when adjacent similarity drops below
     # Context enrichment
-    prepend_title: bool = True     # Prepend document title to each chunk
-    prepend_headers: bool = True   # Prepend section headers to each chunk
+    prepend_title: bool = True  # Prepend document title to each chunk
+    prepend_headers: bool = True  # Prepend section headers to each chunk
+    # Anthropic Contextual Retrieval (2024)
+    enable_contextual_retrieval: bool = False  # Prepend LLM-generated context summary
 
 
 @dataclass(frozen=True)
@@ -64,23 +70,24 @@ class ChunkResult:
         {chunk_id, doc_id, source_type, section_title, page_number,
          char_offset, token_count, s3_url}
     """
+
     # Core content
-    content: str                                      # The chunk text
-    chunk_index: int                                  # Position in document
-    start_char: int                                   # Character offset in source
-    end_char: int                                     # Character offset in source
-    token_count: int                                  # Estimated token count
+    content: str  # The chunk text
+    chunk_index: int  # Position in document
+    start_char: int  # Character offset in source
+    end_char: int  # Character offset in source
+    token_count: int  # Estimated token count
 
     # Provenance fields (required for reliable citations)
-    doc_id: str = ""                                  # Parent document UUID
-    source_type: str = ""                             # "pdf", "csv", "markdown", etc.
-    section_title: str = ""                           # Heading this chunk lives under
-    page_number: int | None = None                    # PDF page number (None for non-PDF)
-    s3_url: str = ""                                  # Source URL if from cloud storage
+    doc_id: str = ""  # Parent document UUID
+    source_type: str = ""  # "pdf", "csv", "markdown", etc.
+    section_title: str = ""  # Heading this chunk lives under
+    page_number: int | None = None  # PDF page number (None for non-PDF)
+    s3_url: str = ""  # Source URL if from cloud storage
 
     # Parent-child indexing (Phase 4)
-    parent_chunk_id: str | None = None                # For child chunks → parent reference
-    chunk_id: str = ""                                # Unique chunk identifier
+    parent_chunk_id: str | None = None  # For child chunks → parent reference
+    chunk_id: str = ""  # Unique chunk identifier
 
     # Extensible metadata
     metadata: dict[str, Any] = field(default_factory=dict)

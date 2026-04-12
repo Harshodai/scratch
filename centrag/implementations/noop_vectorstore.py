@@ -6,18 +6,17 @@ Supports all VectorStoreProtocol operations including filtered search.
 
 Production replacement: QdrantVectorStore, PineconeStore, PgVectorStore.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
-
-from centrag.utils.logger import get_logger
 
 from centrag.abstractions.vectorstore import (
     VectorFilter,
     VectorSearchResult,
-    VectorStoreProtocol,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.vectorstore.noop")
 
@@ -25,6 +24,7 @@ logger = get_logger("implementations.vectorstore.noop")
 @dataclass
 class _StoredVector:
     """Internal representation of a stored vector."""
+
     id: str
     vector: list[float]
     payload: dict[str, Any]
@@ -80,9 +80,7 @@ class NoOpVectorStore:
     ) -> None:
         """Insert or update a single vector."""
         composite_key = f"{collection}:{id}"
-        self._store[composite_key] = _StoredVector(
-            id=id, vector=vector, payload=payload, collection=collection
-        )
+        self._store[composite_key] = _StoredVector(id=id, vector=vector, payload=payload, collection=collection)
         logger.debug("noop_upsert", collection=collection, id=id)
 
     async def upsert_batch(
@@ -147,8 +145,7 @@ class NoOpVectorStore:
         to_delete = [
             key
             for key, stored in self._store.items()
-            if stored.collection == collection
-            and _matches_filter(stored.payload, filter)
+            if stored.collection == collection and _matches_filter(stored.payload, filter)
         ]
         for key in to_delete:
             del self._store[key]

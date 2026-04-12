@@ -9,20 +9,21 @@ Tests:
   - GuardrailEngine: builds rails from config
   - PII module: detect + redact functions
 """
+
 from __future__ import annotations
 
 import pytest
 
+from centrag.abstractions.guardrail import GuardrailViolation, RailContext
 from centrag.guardrails.engine import (
+    ConfidenceGateRail,
     GuardrailEngine,
     GuardrailsConfig,
-    PromptInjectionRail,
     InputLengthRail,
     OutputPIIRedactionRail,
-    ConfidenceGateRail,
+    PromptInjectionRail,
 )
 from centrag.guardrails.pii import detect_pii, redact_pii
-from centrag.abstractions.guardrail import RailContext, GuardrailViolation
 
 
 @pytest.fixture
@@ -39,13 +40,16 @@ def rail_ctx():
 # PromptInjectionRail
 # =============================================================================
 
+
 class TestPromptInjectionRail:
     @pytest.fixture
     def rail(self):
-        return PromptInjectionRail([
-            r"ignore\s+previous\s+instructions",
-            r"system\s*prompt",
-        ])
+        return PromptInjectionRail(
+            [
+                r"ignore\s+previous\s+instructions",
+                r"system\s*prompt",
+            ]
+        )
 
     @pytest.mark.asyncio
     async def test_blocks_injection(self, rail, rail_ctx):
@@ -61,6 +65,7 @@ class TestPromptInjectionRail:
 # =============================================================================
 # InputLengthRail
 # =============================================================================
+
 
 class TestInputLengthRail:
     @pytest.fixture
@@ -86,6 +91,7 @@ class TestInputLengthRail:
 # =============================================================================
 # PII Detection & Redaction
 # =============================================================================
+
 
 class TestPII:
     def test_detect_ssn(self):
@@ -115,19 +121,19 @@ class TestPII:
 # OutputPIIRedactionRail
 # =============================================================================
 
+
 class TestOutputPIIRedactionRail:
     @pytest.mark.asyncio
     async def test_redacts_ssn_in_response(self, rail_ctx):
         rail = OutputPIIRedactionRail()
-        result = await rail.validate(
-            "The SSN is 123-45-6789", [], rail_ctx
-        )
+        result = await rail.validate("The SSN is 123-45-6789", [], rail_ctx)
         assert "123-45-6789" not in result
 
 
 # =============================================================================
 # ConfidenceGateRail
 # =============================================================================
+
 
 class TestConfidenceGateRail:
     @pytest.mark.asyncio
@@ -139,6 +145,7 @@ class TestConfidenceGateRail:
     @pytest.mark.asyncio
     async def test_high_confidence_passes(self, rail_ctx):
         from unittest.mock import MagicMock
+
         source = MagicMock()
         source.relevance_score = 0.9
         rail = ConfidenceGateRail(min_threshold=0.3)
@@ -149,6 +156,7 @@ class TestConfidenceGateRail:
 # =============================================================================
 # GuardrailEngine Construction
 # =============================================================================
+
 
 class TestGuardrailEngine:
     def test_builds_default_rails(self):

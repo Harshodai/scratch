@@ -8,6 +8,7 @@ Agentic Pattern: TOOL USE
 
 Now WIRED to the real RetrievalEngine built in app.py lifespan.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
@@ -54,9 +55,9 @@ class SourceResponse(BaseModel):
     document_id: str
     chunk_index: int
     relevance_score: float
-    source_type: str = ""               # "pageindex" | "vector"
-    page_refs: str = ""                 # VECTORLESS: page ranges
-    reasoning: str = ""                 # VECTORLESS: LLM navigation reasoning
+    source_type: str = ""  # "pageindex" | "vector"
+    page_refs: str = ""  # VECTORLESS: page ranges
+    reasoning: str = ""  # VECTORLESS: LLM navigation reasoning
 
 
 class RetrieveResponse(BaseModel):
@@ -65,7 +66,7 @@ class RetrieveResponse(BaseModel):
     query_complexity: str
     cache_tier: str
     memory_used: bool
-    retrieval_source: str = ""          # "pageindex" | "vector" | "hybrid"
+    retrieval_source: str = ""  # "pageindex" | "vector" | "hybrid"
 
 
 def _get_engine(request: Request) -> RetrievalEngine:

@@ -22,6 +22,7 @@ SOLID: Single Responsibility — only processes the queue.
 SOLID: Dependency Inversion — depends on IngestionService (abstraction),
        not on PageIndex or Qdrant directly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,16 +31,16 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
-from centrag.ingestion.service import IngestionService, IngestionResult
+from centrag.ingestion.service import IngestionResult, IngestionService
 from centrag.storage.document_store import DocumentStore
+from centrag.utils.logger import get_logger
 
 logger = get_logger("ingestion.worker")
 
 
 class JobStatus(str, Enum):
     """Lifecycle states for an ingestion job."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -54,12 +55,13 @@ class IngestionJob:
 
     Tracks the full lifecycle from enqueue to completion/failure.
     """
-    job_id: str                           # Unique job identifier
-    file_bytes: bytes                     # Raw file content
-    filename: str                         # Original filename
-    team_id: str                          # Owning team (multi-tenant)
-    content_type: str | None = None       # MIME type
-    namespace: str = "default"            # Logical grouping
+
+    job_id: str  # Unique job identifier
+    file_bytes: bytes  # Raw file content
+    filename: str  # Original filename
+    team_id: str  # Owning team (multi-tenant)
+    content_type: str | None = None  # MIME type
+    namespace: str = "default"  # Logical grouping
     user_metadata: dict[str, Any] | None = None
 
     # Lifecycle tracking
@@ -76,11 +78,12 @@ class IngestionJob:
 @dataclass
 class WorkerConfig:
     """Configuration for the ingestion worker."""
-    max_concurrent: int = 1               # Sequential by default (LLM rate limits)
-    max_retries: int = 3                  # Per-job retry limit
-    base_backoff_seconds: float = 2.0     # Exponential backoff base
-    max_backoff_seconds: float = 60.0     # Backoff cap
-    queue_maxsize: int = 100              # Max pending jobs
+
+    max_concurrent: int = 1  # Sequential by default (LLM rate limits)
+    max_retries: int = 3  # Per-job retry limit
+    base_backoff_seconds: float = 2.0  # Exponential backoff base
+    max_backoff_seconds: float = 60.0  # Backoff cap
+    queue_maxsize: int = 100  # Max pending jobs
     shutdown_timeout_seconds: float = 30  # Grace period on shutdown
 
 
@@ -113,9 +116,7 @@ class IngestionWorker:
         self._service = ingestion_service
         self._store = document_store
         self._config = config or WorkerConfig()
-        self._queue: asyncio.Queue[IngestionJob] = asyncio.Queue(
-            maxsize=self._config.queue_maxsize
-        )
+        self._queue: asyncio.Queue[IngestionJob] = asyncio.Queue(maxsize=self._config.queue_maxsize)
         self._jobs: dict[str, IngestionJob] = {}  # job_id → job
         self._task: asyncio.Task | None = None
         self._running = False
@@ -149,7 +150,7 @@ class IngestionWorker:
                     self._task,
                     timeout=self._config.shutdown_timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("worker_shutdown_timeout", timeout=self._config.shutdown_timeout_seconds)
                 self._task.cancel()
                 try:
@@ -246,10 +247,8 @@ class IngestionWorker:
             try:
                 # Wait with timeout so we can check self._running
                 try:
-                    job = await asyncio.wait_for(
-                        self._queue.get(), timeout=1.0
-                    )
-                except asyncio.TimeoutError:
+                    job = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+                except TimeoutError:
                     continue
 
                 await self._process_job(job)

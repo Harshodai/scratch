@@ -8,11 +8,10 @@ Verifies:
     - Empty input handling
     - Top-N limiting
 """
+
 from __future__ import annotations
 
-import pytest
-
-from centrag.retrieval.hybrid import HybridRetriever, FusedResult, HybridResult
+from centrag.retrieval.hybrid import HybridRetriever
 
 
 def _make_result(doc_id: str, content: str, score: float = 0.9) -> dict:
@@ -196,12 +195,14 @@ class TestEdgeCases:
         """Result metadata flows through fusion."""
         hybrid = HybridRetriever(k=60)
         result = hybrid.fuse(
-            pageindex_results=[{
-                "document_id": "d1",
-                "content": "text",
-                "relevance_score": 0.95,
-                "metadata": {"page_refs": "5-7", "section": "Risk"},
-            }],
+            pageindex_results=[
+                {
+                    "document_id": "d1",
+                    "content": "text",
+                    "relevance_score": 0.95,
+                    "metadata": {"page_refs": "5-7", "section": "Risk"},
+                }
+            ],
             vector_results=[],
         )
 

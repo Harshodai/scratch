@@ -7,25 +7,27 @@ Verifies:
     - Metrics aggregation and reporting
     - Path comparator winners
 """
+
 from __future__ import annotations
 
 import json
 import os
 import tempfile
+
 import pytest
 
-from centrag.evaluation.dataset import GoldenDataset, TestCase, Difficulty
-from centrag.evaluation.judges import (
-    FaithfulnessJudge,
-    RelevanceJudge,
-    CoverageJudge,
-    JudgeResult,
-)
-from centrag.evaluation.metrics import EvaluationMetrics, CaseResult
 from centrag.evaluation.comparator import PathComparator
-
+from centrag.evaluation.dataset import Difficulty, GoldenDataset, TestCase
+from centrag.evaluation.judges import (
+    CoverageJudge,
+    FaithfulnessJudge,
+    JudgeResult,
+    RelevanceJudge,
+)
+from centrag.evaluation.metrics import EvaluationMetrics
 
 # ── Golden Dataset ──────────────────────────────────────────────────
+
 
 class TestGoldenDataset:
     """Dataset lifecycle tests."""
@@ -41,35 +43,43 @@ class TestGoldenDataset:
         assert ds.size == 1
 
     def test_filter_by_difficulty(self):
-        ds = GoldenDataset([
-            TestCase(id="1", query="Q1", expected_answer="A1", difficulty=Difficulty.SIMPLE),
-            TestCase(id="2", query="Q2", expected_answer="A2", difficulty=Difficulty.COMPLEX),
-            TestCase(id="3", query="Q3", expected_answer="A3", difficulty=Difficulty.SIMPLE),
-        ])
+        ds = GoldenDataset(
+            [
+                TestCase(id="1", query="Q1", expected_answer="A1", difficulty=Difficulty.SIMPLE),
+                TestCase(id="2", query="Q2", expected_answer="A2", difficulty=Difficulty.COMPLEX),
+                TestCase(id="3", query="Q3", expected_answer="A3", difficulty=Difficulty.SIMPLE),
+            ]
+        )
         simple = ds.filter_by_difficulty(Difficulty.SIMPLE)
         assert len(simple) == 2
 
     def test_filter_by_tag(self):
-        ds = GoldenDataset([
-            TestCase(id="1", query="Q1", expected_answer="A1", tags=["risk"]),
-            TestCase(id="2", query="Q2", expected_answer="A2", tags=["finance"]),
-            TestCase(id="3", query="Q3", expected_answer="A3", tags=["risk", "finance"]),
-        ])
+        ds = GoldenDataset(
+            [
+                TestCase(id="1", query="Q1", expected_answer="A1", tags=["risk"]),
+                TestCase(id="2", query="Q2", expected_answer="A2", tags=["finance"]),
+                TestCase(id="3", query="Q3", expected_answer="A3", tags=["risk", "finance"]),
+            ]
+        )
         risk = ds.filter_by_tag("risk")
         assert len(risk) == 2
 
     def test_get_by_id(self):
-        ds = GoldenDataset([
-            TestCase(id="tc-42", query="Q", expected_answer="A"),
-        ])
+        ds = GoldenDataset(
+            [
+                TestCase(id="tc-42", query="Q", expected_answer="A"),
+            ]
+        )
         assert ds.get_by_id("tc-42") is not None
         assert ds.get_by_id("missing") is None
 
     def test_json_roundtrip(self):
-        ds = GoldenDataset([
-            TestCase(id="1", query="Q1", expected_answer="A1", difficulty=Difficulty.COMPLEX),
-            TestCase(id="2", query="Q2", expected_answer="A2", tags=["test"]),
-        ])
+        ds = GoldenDataset(
+            [
+                TestCase(id="1", query="Q1", expected_answer="A1", difficulty=Difficulty.COMPLEX),
+                TestCase(id="2", query="Q2", expected_answer="A2", tags=["test"]),
+            ]
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "golden.json")
             ds.to_json(path)
@@ -85,6 +95,7 @@ class TestGoldenDataset:
 
 
 # ── Faithfulness Judge ──────────────────────────────────────────────
+
 
 class TestFaithfulnessJudge:
     """Source grounding evaluation."""
@@ -121,6 +132,7 @@ class TestFaithfulnessJudge:
 
 # ── Relevance Judge ─────────────────────────────────────────────────
 
+
 class TestRelevanceJudge:
     """Query addressing evaluation."""
 
@@ -152,6 +164,7 @@ class TestRelevanceJudge:
 
 # ── Coverage Judge ──────────────────────────────────────────────────
 
+
 class TestCoverageJudge:
     """Key fact recall evaluation."""
 
@@ -182,6 +195,7 @@ class TestCoverageJudge:
 
 # ── Evaluation Metrics ──────────────────────────────────────────────
 
+
 class TestEvaluationMetrics:
     """Aggregate metrics and reporting."""
 
@@ -201,14 +215,20 @@ class TestEvaluationMetrics:
         case1 = TestCase(id="1", query="Q1", expected_answer="A1", difficulty=Difficulty.SIMPLE)
         case2 = TestCase(id="2", query="Q2", expected_answer="A2", difficulty=Difficulty.COMPLEX)
 
-        metrics.add(case1, [
-            JudgeResult("faithfulness", 0.8, "Good"),
-            JudgeResult("relevance", 0.9, "Great"),
-        ])
-        metrics.add(case2, [
-            JudgeResult("faithfulness", 0.6, "OK"),
-            JudgeResult("relevance", 0.7, "Fine"),
-        ])
+        metrics.add(
+            case1,
+            [
+                JudgeResult("faithfulness", 0.8, "Good"),
+                JudgeResult("relevance", 0.9, "Great"),
+            ],
+        )
+        metrics.add(
+            case2,
+            [
+                JudgeResult("faithfulness", 0.6, "OK"),
+                JudgeResult("relevance", 0.7, "Fine"),
+            ],
+        )
 
         report = metrics.generate_report()
         assert report.total_cases == 2
@@ -242,6 +262,7 @@ class TestEvaluationMetrics:
 
 
 # ── Path Comparator ─────────────────────────────────────────────────
+
 
 class TestPathComparator:
     """Side-by-side path comparison."""

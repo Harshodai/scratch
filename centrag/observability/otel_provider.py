@@ -26,20 +26,19 @@ Environment variables:
 Docker Compose for backends:
   See docker-compose.observability.yml in project root.
 """
+
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
-
-from centrag.utils.logger import get_logger
+from typing import Any
 
 from centrag.observability import (
-    TracingProtocol,
-    MetricsProtocol,
     SpanContext,
     SpanKind,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("observability.otel")
 
@@ -72,15 +71,16 @@ class OTelTracer:
         if self._tracer is None:
             try:
                 from opentelemetry import trace
+                from opentelemetry.sdk.resources import Resource
                 from opentelemetry.sdk.trace import TracerProvider
                 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-                from opentelemetry.sdk.resources import Resource
 
                 resource = Resource.create({"service.name": self._service_name})
                 provider = TracerProvider(resource=resource)
 
                 if self._endpoint:
                     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
                     exporter = OTLPSpanExporter(endpoint=self._endpoint)
                     provider.add_span_processor(BatchSpanProcessor(exporter))
 
@@ -110,6 +110,8 @@ class OTelTracer:
                 ctx.end_time = time.monotonic()
             return
 
+        from opentelemetry import trace  # Ensure trace is in scope for Status/StatusCode
+
         with tracer.start_as_current_span(name) as otel_span:
             otel_span.set_attribute("span.kind", kind.value)
             if attributes:
@@ -132,6 +134,7 @@ class OTelTracer:
     async def flush(self) -> None:
         try:
             from opentelemetry import trace
+
             provider = trace.get_tracer_provider()
             if hasattr(provider, "force_flush"):
                 provider.force_flush()
@@ -166,6 +169,7 @@ class OTelMetrics:
             try:
                 from opentelemetry import metrics
                 from opentelemetry.sdk.metrics import MeterProvider
+
                 self._meter = metrics.get_meter(self._service_name)
                 logger.info("otel_meter_initialized")
             except ImportError:

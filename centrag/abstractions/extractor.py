@@ -16,6 +16,7 @@ Design Pattern: TEMPLATE METHOD
       Parse → Clean → Enrich Metadata → Return
     - Each parser provides the "parse" step; cleaning/enrichment is shared
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ from typing import Any, Protocol, runtime_checkable
 
 class ContentType(str, Enum):
     """Supported document content types."""
+
     PDF = "application/pdf"
     DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     DOC = "application/msword"
@@ -39,6 +41,7 @@ class ContentType(str, Enum):
 @dataclass(frozen=True)
 class ExtractedElement:
     """A single extracted element (paragraph, table, header, etc.)."""
+
     content: str
     element_type: str  # "paragraph" | "table" | "header" | "list_item" | "image_caption"
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -52,7 +55,8 @@ class ExtractedDocument:
     Contains the full extracted text, individual structural elements,
     and document-level metadata (title, author, page count, etc.).
     """
-    text: str                                        # Full cleaned text
+
+    text: str  # Full cleaned text
     elements: list[ExtractedElement] = field(default_factory=list)
     title: str = ""
     content_type: ContentType = ContentType.PLAIN_TEXT

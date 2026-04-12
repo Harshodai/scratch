@@ -1,13 +1,13 @@
 import structlog
 
-# Basic configuration to ensure logs propagate properly even without environment checks 
+# Basic configuration to ensure logs propagate properly even without environment checks
 # per the KISS/YAGNI principle mandate.
 structlog.configure(
     processors=[
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.dev.ConsoleRenderer(colors=False)  # Disabled colors for raw stability
+        structlog.dev.ConsoleRenderer(colors=False),  # Disabled colors for raw stability
     ],
     context_class=dict,
     logger_factory=structlog.stdlib.LoggerFactory(),
@@ -17,8 +17,10 @@ structlog.configure(
 
 from typing import Any
 
+
 class CentragLogger:
     """Explicitly typed adapter to serialize and forward context to structlog."""
+
     def __init__(self, logger: structlog.BoundLogger):
         self._logger = logger
 
@@ -33,6 +35,7 @@ class CentragLogger:
 
     def debug(self, event: str, **kwargs: Any) -> None:
         self._logger.debug(event, **kwargs)
+
 
 def get_logger(name: str | None = None) -> CentragLogger:
     """

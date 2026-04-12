@@ -2,19 +2,19 @@
 HyDE Transformer — Hypothetical Document Embeddings.
 Generates a hypothetical answer to the query to improve semantic search alignment.
 
-ADR Alignment: Advanced RAG Techniques (HyDE) — improves retrieval for questions 
+ADR Alignment: Advanced RAG Techniques (HyDE) — improves retrieval for questions
 where the query and the answer live in different semantic spaces.
 """
+
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
-from centrag.utils.logger import get_logger
 from centrag.abstractions.llm import LLMProtocol
 from centrag.abstractions.query_transformer import QueryIntent, QueryTransformerProtocol
 from centrag.abstractions.vectorstore import VectorFilter
+from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.hyde_transformer")
 
@@ -47,7 +47,7 @@ class HyDETransformer(QueryTransformerProtocol):
                 temperature=0.7,  # Higher temperature for diverse hypothetical docs
                 max_tokens=300,
             )
-            
+
             hypothetical_doc = response.content.strip()
 
             # Stage 2: Extract Filters (using a secondary fast prompt or combined)
@@ -55,7 +55,7 @@ class HyDETransformer(QueryTransformerProtocol):
             filter_prompt = (
                 "Analyze the original query and extract any metadata filters as JSON.\n"
                 "Query: {raw_query}\n"
-                "Return ONLY JSON: {\"filters\": {\"key\": \"value\"}, \"expansions\": []}"
+                'Return ONLY JSON: {"filters": {"key": "value"}, "expansions": []}'
             ).replace("{raw_query}", raw_query)
 
             filter_response = await self._llm.generate(
@@ -67,9 +67,9 @@ class HyDETransformer(QueryTransformerProtocol):
             )
 
             # Parse filters
-            match = re.search(r'\{.*\}', filter_response.content, re.DOTALL)
+            match = re.search(r"\{.*\}", filter_response.content, re.DOTALL)
             parsed = json.loads(match.group(0)) if match else {}
-            
+
             v_filter = VectorFilter.for_team(team_id)
             filters_dict = parsed.get("filters", {})
             for k, v in filters_dict.items():
@@ -82,12 +82,9 @@ class HyDETransformer(QueryTransformerProtocol):
                 expansions=[raw_query] + parsed.get("expansions", []),
                 extracted_filter=v_filter,
             )
-            
+
             logger.info(
-                "hyde_transformation_complete",
-                raw_query=raw_query,
-                hyde_len=len(hypothetical_doc),
-                team_id=team_id
+                "hyde_transformation_complete", raw_query=raw_query, hyde_len=len(hypothetical_doc), team_id=team_id
             )
             return intent
 
@@ -95,7 +92,5 @@ class HyDETransformer(QueryTransformerProtocol):
             logger.error("hyde_transformation_failed", error=str(e))
             # Fallback to raw query
             return QueryIntent(
-                optimized_query=raw_query,
-                expansions=[],
-                extracted_filter=VectorFilter.for_team(team_id)
+                optimized_query=raw_query, expansions=[], extracted_filter=VectorFilter.for_team(team_id)
             )

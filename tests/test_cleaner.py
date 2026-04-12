@@ -10,18 +10,16 @@ Verifies:
     - Audit trail (CleaningResult metadata)
     - Pipeline stage toggling via config
 """
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from centrag.ingestion.cleaner import (
     DocumentCleaner,
     DocumentCleanerConfig,
-    CleaningResult,
 )
 
-
 # ── Unicode Normalization ───────────────────────────────────────────
+
 
 class TestUnicodeNormalization:
     """Stage 1: Unicode normalization."""
@@ -29,7 +27,7 @@ class TestUnicodeNormalization:
     def test_smart_quotes_normalized(self):
         cleaner = DocumentCleaner()
         result = cleaner.clean("\u201cHello\u201d \u2018world\u2019")
-        assert '"Hello" \'world\'' in result.cleaned_text
+        assert "\"Hello\" 'world'" in result.cleaned_text
 
     def test_em_dash_normalized(self):
         cleaner = DocumentCleaner()
@@ -59,6 +57,7 @@ class TestUnicodeNormalization:
 
 # ── Whitespace Normalization ────────────────────────────────────────
 
+
 class TestWhitespaceNormalization:
     """Stage 2: Whitespace normalization."""
 
@@ -84,6 +83,7 @@ class TestWhitespaceNormalization:
 
 
 # ── Header/Footer Stripping ────────────────────────────────────────
+
 
 class TestHeaderFooterStripping:
     """Stage 3: Remove PDF artifacts."""
@@ -118,6 +118,7 @@ class TestHeaderFooterStripping:
 
 
 # ── PII Redaction ───────────────────────────────────────────────────
+
 
 class TestPIIRedaction:
     """Stage 4: PII detection and redaction."""
@@ -164,6 +165,7 @@ class TestPIIRedaction:
 
 # ── Audit Trail ─────────────────────────────────────────────────────
 
+
 class TestAuditTrail:
     """CleaningResult records what happened during cleaning."""
 
@@ -197,6 +199,7 @@ class TestAuditTrail:
 
 # ── Config Toggles ──────────────────────────────────────────────────
 
+
 class TestConfigToggles:
     """DocumentCleanerConfig stage toggles."""
 
@@ -216,19 +219,20 @@ class TestConfigToggles:
 
 # ── Integration: Full Pipeline ──────────────────────────────────────
 
+
 class TestFullPipeline:
     """End-to-end cleaning with mixed content."""
 
     def test_mixed_content(self):
         text = (
-            "\ufeff"                                      # BOM
-            "\u201cAnnual Report\u201d\n"                 # Smart quotes
-            "Page 1 of 50\n"                              # Page number
-            "\n\n\n\n\n"                                  # Excessive newlines
-            "Employee SSN: 123-45-6789\n"                 # PII
+            "\ufeff"  # BOM
+            "\u201cAnnual Report\u201d\n"  # Smart quotes
+            "Page 1 of 50\n"  # Page number
+            "\n\n\n\n\n"  # Excessive newlines
+            "Employee SSN: 123-45-6789\n"  # PII
             "Revenue was $42M in Q4.\n"
-            "Contact: cfo@company.com\n"                  # PII
-            "\n42\n"                                      # Standalone number
+            "Contact: cfo@company.com\n"  # PII
+            "\n42\n"  # Standalone number
             "End of report."
         )
 

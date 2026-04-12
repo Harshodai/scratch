@@ -4,16 +4,15 @@ Text / Markdown / HTML / DOCX parsers — lightweight extractors.
 These handle non-PDF document types using unstructured or built-in parsing.
 Each class implements ExtractorProtocol and registers for its content types.
 """
-from __future__ import annotations
 
-from centrag.utils.logger import get_logger
+from __future__ import annotations
 
 from centrag.abstractions.extractor import (
     ContentType,
     ExtractedDocument,
     ExtractedElement,
-    ExtractorProtocol,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("extraction.parsers.text")
 
@@ -38,19 +37,13 @@ class PlainTextParser:
             for line in text.split("\n"):
                 stripped = line.strip()
                 if stripped.startswith("#"):
-                    elements.append(
-                        ExtractedElement(content=stripped.lstrip("# "), element_type="header")
-                    )
+                    elements.append(ExtractedElement(content=stripped.lstrip("# "), element_type="header"))
                 elif stripped:
-                    elements.append(
-                        ExtractedElement(content=stripped, element_type="paragraph")
-                    )
+                    elements.append(ExtractedElement(content=stripped, element_type="paragraph"))
         else:
             for para in text.split("\n\n"):
                 if para.strip():
-                    elements.append(
-                        ExtractedElement(content=para.strip(), element_type="paragraph")
-                    )
+                    elements.append(ExtractedElement(content=para.strip(), element_type="paragraph"))
 
         return ExtractedDocument(
             text=text,
@@ -80,8 +73,8 @@ class HTMLParser:
         content_type: ContentType,
         filename: str = "",
     ) -> ExtractedDocument:
-        import tempfile
         import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmp:
             tmp.write(file_bytes)
@@ -133,8 +126,8 @@ class DOCXParser:
         content_type: ContentType,
         filename: str = "",
     ) -> ExtractedDocument:
-        import tempfile
         import os
+        import tempfile
 
         suffix = ".docx" if content_type == ContentType.DOCX else ".doc"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -159,9 +152,7 @@ class DOCXParser:
                 else:
                     element_type = "paragraph"
 
-                extracted_elements.append(
-                    ExtractedElement(content=str(el), element_type=element_type)
-                )
+                extracted_elements.append(ExtractedElement(content=str(el), element_type=element_type))
 
             full_text = "\n\n".join(str(el) for el in elements if str(el).strip())
 
@@ -196,8 +187,8 @@ class CSVExcelParser:
         content_type: ContentType,
         filename: str = "",
     ) -> ExtractedDocument:
-        import tempfile
         import os
+        import tempfile
 
         suffix = ".csv" if content_type == ContentType.CSV else ".xlsx"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -207,15 +198,15 @@ class CSVExcelParser:
         try:
             if content_type == ContentType.CSV:
                 from unstructured.partition.csv import partition_csv
+
                 elements = partition_csv(filename=tmp_path)
             else:
                 from unstructured.partition.xlsx import partition_xlsx
+
                 elements = partition_xlsx(filename=tmp_path)
 
             extracted_elements = [
-                ExtractedElement(content=str(el), element_type="table")
-                for el in elements
-                if str(el).strip()
+                ExtractedElement(content=str(el), element_type="table") for el in elements if str(el).strip()
             ]
 
             full_text = "\n\n".join(str(el) for el in elements if str(el).strip())

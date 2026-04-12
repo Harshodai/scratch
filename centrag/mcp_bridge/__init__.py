@@ -11,7 +11,7 @@ This bridge enables CentRAG to participate in the MCP ecosystem
 while maintaining clean boundaries.
 """
 
-from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
 from centrag.mcp_bridge.mcp_as_rag_source import MCPDataSource
+from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
 
 __all__ = ["register_rag_tools", "MCPDataSource"]

@@ -12,14 +12,15 @@ SOLID: Single Responsibility — only document CRUD. No retrieval logic.
 
 All routes require auth (RequestContext injected via Depends).
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from centrag.ingestion.service import IngestionService
 from centrag.middleware import RequestContext
 from centrag.middleware.auth import resolve_api_key
-from centrag.ingestion.service import IngestionService
 from centrag.storage.document_store import DocumentStore
 
 router = APIRouter(tags=["documents"])
@@ -27,16 +28,17 @@ router = APIRouter(tags=["documents"])
 
 class DocumentResponse(BaseModel):
     """Response for document operations — reports status of both paths."""
+
     id: str
     filename: str
     namespace: str
-    status: str                          # "pending" | "processing" | "ready" | "failed"
+    status: str  # "pending" | "processing" | "ready" | "failed"
     content_type: str = ""
     page_count: int = 0
-    tree_node_count: int = 0             # VECTORLESS path
-    tree_available: bool = False         # VECTORLESS path
-    chunk_count: int = 0                 # VECTOR path (Day 3)
-    vectors_available: bool = False      # VECTOR path (Day 3)
+    tree_node_count: int = 0  # VECTORLESS path
+    tree_available: bool = False  # VECTORLESS path
+    chunk_count: int = 0  # VECTOR path (Day 3)
+    vectors_available: bool = False  # VECTOR path (Day 3)
     error: str = ""
 
 
@@ -96,6 +98,7 @@ async def upload_document(
     if async_mode and worker is not None:
         # --- ASYNC: Enqueue and return immediately ---
         import uuid
+
         doc_id = str(uuid.uuid4())
 
         # Pre-create document metadata so GET returns something
@@ -199,6 +202,7 @@ async def get_document_status(
     meta = await store.get_meta(ctx.team_id, document_id)
     if meta is None:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
 
     return DocumentResponse(
@@ -234,6 +238,7 @@ async def get_document_tree(
     tree = await store.get_pageindex_tree(ctx.team_id, document_id)
     if tree is None:
         from fastapi import HTTPException
+
         raise HTTPException(
             status_code=404,
             detail=f"No tree index found for document {document_id}",
@@ -256,6 +261,7 @@ async def delete_document(
     deleted = await store.delete_document(ctx.team_id, document_id)
     if not deleted:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
 
     # TODO Day 3: Also remove vectors from Qdrant

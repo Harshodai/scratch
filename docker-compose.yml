@@ -1,52 +1,42 @@
-# CentRAG Local Development Stack
-# Run: docker compose up -d
-# Verify: docker compose ps
+version: '3.8'
+
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: centrag-postgres
+  app:
+    build: .
+    ports:
+      - "8000:8000"
     environment:
-      POSTGRES_DB: centrag
-      POSTGRES_USER: centrag
-      POSTGRES_PASSWORD: centrag_dev_only
+      - CENTRAG_ENV=development
+      - CENTRAG_PG_HOST=db
+      - CENTRAG_REDIS_URL=redis://redis:6379/0
+      - CENTRAG_QDRANT_LOCAL_PATH=/app/data/qdrant
+      - CENTRAG_ENABLE_VECTOR=true
+      - CENTRAG_LLM_PROVIDER=${CENTRAG_LLM_PROVIDER:-noop}
+      - CENTRAG_EMBEDDER_PROVIDER=${CENTRAG_EMBEDDER_PROVIDER:-noop}
+      - LLAMA_CLOUD_API_KEY=${LLAMA_CLOUD_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./data:/app/data
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=centrag
+      - POSTGRES_USER=centrag
+      - POSTGRES_PASSWORD=centrag_dev_only
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U centrag"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
 
   redis:
     image: redis:7-alpine
-    container_name: centrag-redis
     ports:
       - "6379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: centrag-qdrant
-    ports:
-      - "6333:6333"   # REST API
-      - "6334:6334"   # gRPC
-    volumes:
-      - qdrant_data:/qdrant/storage
-    environment:
-      QDRANT__SERVICE__GRPC_PORT: 6334
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
 
 volumes:
-  pgdata:
-  qdrant_data:
+  postgres_data:

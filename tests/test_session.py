@@ -8,20 +8,20 @@ Verifies:
     - Context window generation
     - SessionManager CRUD + cleanup
 """
+
 from __future__ import annotations
 
 import time
-import pytest
 
 from centrag.retrieval.session import (
     ConversationSession,
+    MessageRole,
     SessionConfig,
     SessionManager,
-    MessageRole,
 )
 
-
 # ── Message Management ──────────────────────────────────────────────
+
 
 class TestMessageManagement:
     """Add, retrieve, and clear messages."""
@@ -68,6 +68,7 @@ class TestMessageManagement:
 
 # ── Pruning ─────────────────────────────────────────────────────────
 
+
 class TestPruning:
     """Message count and token budget pruning."""
 
@@ -99,6 +100,7 @@ class TestPruning:
 
 
 # ── Context Window ──────────────────────────────────────────────────
+
 
 class TestContextWindow:
     """Context window generation for LLM."""
@@ -142,6 +144,7 @@ class TestContextWindow:
 
 # ── Session Expiry ──────────────────────────────────────────────────
 
+
 class TestSessionExpiry:
     """TTL-based session expiration."""
 
@@ -168,6 +171,7 @@ class TestSessionExpiry:
 
 
 # ── Session Manager ─────────────────────────────────────────────────
+
 
 class TestSessionManager:
     """SessionManager CRUD and lifecycle."""

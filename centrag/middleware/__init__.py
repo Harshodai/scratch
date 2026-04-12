@@ -15,10 +15,11 @@ Request Context — Immutable per-request context injected at auth layer.
 
 Design Pattern: VALUE OBJECT (DDD) — identity-less, immutable, equality by value.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 
 @dataclass(frozen=True)
@@ -31,12 +32,10 @@ class RequestContext:
     team_id: str
     team_name: str
     api_key_id: str
-    tier: str = "standard"                    # "standard" | "premium" | "enterprise"
-    rate_limit: int = 60                      # requests/minute for this team
-    request_id: str = ""                      # unique per request (for tracing)
-    timestamp: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    tier: str = "standard"  # "standard" | "premium" | "enterprise"
+    rate_limit: int = 60  # requests/minute for this team
+    request_id: str = ""  # unique per request (for tracing)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         """Validation — fail fast if context is invalid."""

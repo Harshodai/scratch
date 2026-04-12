@@ -8,21 +8,22 @@ Verifies:
     - Graceful shutdown
     - Dead-letter handling (max retries exhausted)
 """
+
 from __future__ import annotations
 
 import asyncio
-import pytest
-import tempfile
 import shutil
-from unittest.mock import AsyncMock, MagicMock
+import tempfile
+from unittest.mock import AsyncMock
 
+import pytest
+
+from centrag.ingestion.service import IngestionResult
 from centrag.ingestion.worker import (
     IngestionWorker,
-    IngestionJob,
-    WorkerConfig,
     JobStatus,
+    WorkerConfig,
 )
-from centrag.ingestion.service import IngestionResult
 from centrag.storage.document_store import DocumentStore
 
 
@@ -64,6 +65,7 @@ def _make_mock_service(
 
 
 # ── Job Lifecycle ───────────────────────────────────────────────────
+
 
 class TestJobLifecycle:
     """Tests for the basic job enqueue → process → complete flow."""
@@ -118,13 +120,16 @@ class TestJobLifecycle:
         # Don't start worker — jobs stay in queue
 
         await worker.enqueue(
-            job_id="j1", file_bytes=b"a",
-            filename="a.pdf", team_id="t1",
+            job_id="j1",
+            file_bytes=b"a",
+            filename="a.pdf",
+            team_id="t1",
         )
         assert worker.queue_size == 1
 
 
 # ── Retry Logic ─────────────────────────────────────────────────────
+
 
 class TestRetryLogic:
     """Tests for exponential backoff and retry handling."""
@@ -133,7 +138,8 @@ class TestRetryLogic:
     async def test_retry_on_failure_then_succeed(self, tmp_store):
         """Job retries and eventually succeeds."""
         service = _make_mock_service(
-            should_fail=True, fail_count=1,  # Fail first, then succeed
+            should_fail=True,
+            fail_count=1,  # Fail first, then succeed
         )
         config = WorkerConfig(
             max_retries=3,
@@ -164,7 +170,8 @@ class TestRetryLogic:
     async def test_exhausted_retries(self, tmp_store):
         """Job fails permanently after max retries."""
         service = _make_mock_service(
-            should_fail=True, fail_count=999,  # Always fails
+            should_fail=True,
+            fail_count=999,  # Always fails
         )
         config = WorkerConfig(
             max_retries=2,
@@ -194,6 +201,7 @@ class TestRetryLogic:
 
 # ── Queue Overflow ──────────────────────────────────────────────────
 
+
 class TestQueueOverflow:
     """Tests for queue capacity handling."""
 
@@ -206,18 +214,23 @@ class TestQueueOverflow:
         # Don't start worker — queue will fill up
 
         await worker.enqueue(
-            job_id="j1", file_bytes=b"a",
-            filename="a.pdf", team_id="t1",
+            job_id="j1",
+            file_bytes=b"a",
+            filename="a.pdf",
+            team_id="t1",
         )
 
         with pytest.raises(asyncio.QueueFull):
             await worker.enqueue(
-                job_id="j2", file_bytes=b"b",
-                filename="b.pdf", team_id="t1",
+                job_id="j2",
+                file_bytes=b"b",
+                filename="b.pdf",
+                team_id="t1",
             )
 
 
 # ── Shutdown ────────────────────────────────────────────────────────
+
 
 class TestShutdown:
     """Tests for graceful shutdown."""

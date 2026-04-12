@@ -7,19 +7,18 @@ Converts tabular data to markdown tables for LLM-friendly format.
 Design Pattern: STRATEGY — implements ExtractorProtocol.
 SOLID: Single Responsibility — only handles CSV/TSV formats.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
 from centrag.abstractions.extractor import (
     ContentType,
     ExtractedDocument,
-    ExtractorProtocol,
 )
+from centrag.utils.logger import get_logger
 
 logger = get_logger("extraction.parsers.csv")
 
@@ -101,10 +100,7 @@ class CSVParser:
         full_content = summary + "\n\n".join(markdown_sections)
 
         # Create per-chunk pages for PageIndex
-        pages = [
-            {"page_number": i + 1, "content": section}
-            for i, section in enumerate(markdown_sections)
-        ]
+        pages = [{"page_number": i + 1, "content": section} for i, section in enumerate(markdown_sections)]
 
         logger.info(
             "csv_parsed",
@@ -153,7 +149,7 @@ class CSVParser:
             # Pad row to match header count
             padded = row + [""] * (len(headers) - len(row))
             # Escape pipe characters in cell content
-            cells = [cell.replace("|", "\\|") for cell in padded[:len(headers)]]
+            cells = [cell.replace("|", "\\|") for cell in padded[: len(headers)]]
             data_lines.append("| " + " | ".join(cells) + " |")
 
         return "\n".join([header_line, separator] + data_lines)

@@ -27,6 +27,7 @@ SOLID: Single Responsibility — only orchestrates ingestion steps.
 SOLID: Open/Closed — add new indexing paths (vector, graph) by
        extending ingest(), not modifying existing path logic.
 """
+
 from __future__ import annotations
 
 import os
@@ -34,13 +35,12 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Any
 
-from centrag.utils.logger import get_logger
-
 from centrag.abstractions.extractor import ContentType
 from centrag.abstractions.tree_index import TreeIndexProtocol
 from centrag.extraction.pipeline import ExtractionPipeline
-from centrag.storage.document_store import DocumentStore, DocumentMeta
-from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig, CleaningResult
+from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
+from centrag.storage.document_store import DocumentStore
+from centrag.utils.logger import get_logger
 
 logger = get_logger("ingestion.service")
 
@@ -64,9 +64,7 @@ _MIME_TO_PAGEINDEX_CONTENT: dict[str, str] = {
 }
 
 
-def _resolve_content_type(
-    content_type: str | None, filename: str
-) -> ContentType:
+def _resolve_content_type(content_type: str | None, filename: str) -> ContentType:
     """Resolve MIME to ContentType, falling back to extension-based detection."""
     if content_type and content_type in _MIME_TO_CONTENT_TYPE:
         return _MIME_TO_CONTENT_TYPE[content_type]
@@ -94,15 +92,16 @@ class IngestionResult:
         - tree_available: VECTORLESS path (PageIndex tree built)
         - vectors_available: VECTOR path (chunks embedded, Day 3)
     """
+
     doc_id: str
     filename: str
-    status: str                     # "ready" | "failed" | "partial"
+    status: str  # "ready" | "failed" | "partial"
     content_type: str
     page_count: int = 0
-    tree_node_count: int = 0        # VECTORLESS path
-    tree_available: bool = False    # VECTORLESS path
-    chunk_count: int = 0            # VECTOR path (Day 3)
-    vectors_available: bool = False # VECTOR path (Day 3)
+    tree_node_count: int = 0  # VECTORLESS path
+    tree_available: bool = False  # VECTORLESS path
+    chunk_count: int = 0  # VECTOR path (Day 3)
+    vectors_available: bool = False  # VECTOR path (Day 3)
     error: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -231,17 +230,13 @@ class IngestionService:
         try:
             # Write file to temp location for PageIndex to read
             ext = os.path.splitext(filename)[1] or ".txt"
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=ext, mode="wb"
-            ) as tmp:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext, mode="wb") as tmp:
                 tmp.write(file_bytes)
                 tmp_path = tmp.name
 
             try:
                 # Determine PageIndex content type
-                pi_content_type = _MIME_TO_PAGEINDEX_CONTENT.get(
-                    mime_type, "text/markdown"
-                )
+                pi_content_type = _MIME_TO_PAGEINDEX_CONTENT.get(mime_type, "text/markdown")
 
                 tree_result = await self._tree_builder.build_tree(
                     file_path=tmp_path,
@@ -324,5 +319,3 @@ class IngestionService:
                 "cleaning_stages": cleaning_result.stages_applied,
             },
         )
-
-

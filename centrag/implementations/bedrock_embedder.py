@@ -18,15 +18,13 @@ Credentials: Uses boto3's default credential chain:
 
 Required IAM permission: bedrock:InvokeModel on the model ARN.
 """
+
 from __future__ import annotations
 
 import json
-import hashlib
 from typing import Any
 
 from centrag.utils.logger import get_logger
-
-from centrag.abstractions.embedder import EmbedderProtocol
 
 logger = get_logger("implementations.embedder.bedrock")
 
@@ -68,11 +66,13 @@ class BedrockEmbedder:
         # Lazy-initialized boto3 client (Pattern 3: Pervasive Lazy Loading)
         self._client = None
         self._credentials = {
-            k: v for k, v in {
+            k: v
+            for k, v in {
                 "aws_access_key_id": aws_access_key_id,
                 "aws_secret_access_key": aws_secret_access_key,
                 "aws_session_token": aws_session_token,
-            }.items() if v  # Only pass non-empty credentials
+            }.items()
+            if v  # Only pass non-empty credentials
         }
 
     def _get_client(self):
@@ -102,6 +102,7 @@ class BedrockEmbedder:
         For production throughput, wrap in run_in_executor.
         """
         import asyncio
+
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._embed_sync, text)
 
@@ -115,6 +116,7 @@ class BedrockEmbedder:
         - Or use the OpenAI Batch API pattern
         """
         import asyncio
+
         loop = asyncio.get_running_loop()
 
         # Sequential to respect rate limits; override with semaphore if needed
@@ -143,11 +145,13 @@ class BedrockEmbedder:
         """Synchronous embedding call to Bedrock."""
         client = self._get_client()
 
-        request_body = json.dumps({
-            "inputText": text,
-            "dimensions": self._dimension,
-            "normalize": self._normalize,
-        })
+        request_body = json.dumps(
+            {
+                "inputText": text,
+                "dimensions": self._dimension,
+                "normalize": self._normalize,
+            }
+        )
 
         response = client.invoke_model(
             body=request_body,

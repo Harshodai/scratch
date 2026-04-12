@@ -31,6 +31,7 @@ SOLID: Dependency Inversion — PageIndexRetriever depends on this protocol,
 Design Pattern: STRATEGY — different tree indexers (PageIndex, custom)
        can be plugged in as long as they satisfy this protocol.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -45,12 +46,13 @@ class TreeNode:
     Represents a section/subsection with page references and an
     LLM-generated summary. Children form the hierarchy.
     """
+
     node_id: str
     title: str
     summary: str = ""
     start_page: int = 0
     end_page: int = 0
-    children: tuple["TreeNode", ...] = ()
+    children: tuple[TreeNode, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -70,11 +72,9 @@ class TreeNode:
         return result
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TreeNode":
+    def from_dict(cls, data: dict[str, Any]) -> TreeNode:
         """Deserialize from JSON."""
-        children = tuple(
-            cls.from_dict(n) for n in data.get("nodes", [])
-        )
+        children = tuple(cls.from_dict(n) for n in data.get("nodes", []))
         return cls(
             node_id=data.get("node_id", ""),
             title=data.get("title", ""),
@@ -94,7 +94,8 @@ class TreeIndexResult:
     Contains the tree structure, optional page cache, and
     metadata about the indexing process.
     """
-    tree: dict[str, Any]              # Raw tree JSON (PageIndex format)
+
+    tree: dict[str, Any]  # Raw tree JSON (PageIndex format)
     page_cache: list[dict[str, Any]]  # [{page: 1, content: "..."}, ...]
     doc_name: str = ""
     doc_description: str = ""
@@ -106,6 +107,7 @@ class TreeIndexResult:
 @dataclass(frozen=True)
 class PageContent:
     """A single page/section extracted from a document."""
+
     page: int
     content: str
     section_title: str = ""

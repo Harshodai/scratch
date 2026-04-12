@@ -6,15 +6,15 @@ Best for: cross-instance cache sharing, session stickiness not required.
 
 Stub implementation — requires Redis connection at runtime.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 from typing import Any
 
+from centrag.abstractions.cache import CacheResult, CacheTier
 from centrag.utils.logger import get_logger
-
-from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
 
 logger = get_logger("cache.l2")
 
@@ -33,15 +33,16 @@ class L2RedisCache:
         self._redis = redis_client
         self._prefix = key_prefix
 
-    def _make_key(self, key: str, team_id: str) -> str:
-        raw = f"{team_id}:{key}"
+    def _make_key(self, key: str, team_id: str, namespace: str | None = None) -> str:
+        namespace_prefix = f"{namespace}:" if namespace else ""
+        raw = f"{team_id}:{namespace_prefix}{key}"
         return f"{self._prefix}{hashlib.sha256(raw.encode()).hexdigest()}"
 
-    async def get(self, key: str, team_id: str) -> CacheResult:
+    async def get(self, key: str, team_id: str, namespace: str | None = None) -> CacheResult:
         if self._redis is None:
             return CacheResult(hit=False, tier=CacheTier.MISS)
 
-        cache_key = self._make_key(key, team_id)
+        cache_key = self._make_key(key, team_id, namespace=namespace)
         try:
             value = await self._redis.get(cache_key)
             if value is not None:
@@ -62,11 +63,12 @@ class L2RedisCache:
         value: Any,
         team_id: str,
         ttl_seconds: int = 3600,
+        namespace: str | None = None,
     ) -> None:
         if self._redis is None:
             return
 
-        cache_key = self._make_key(key, team_id)
+        cache_key = self._make_key(key, team_id, namespace=namespace)
         try:
             await self._redis.set(
                 cache_key,

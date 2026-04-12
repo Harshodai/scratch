@@ -9,15 +9,18 @@ Architecture Pattern:
     2. Request Deduplication (prevents thundering herd of duplicate LLM API calls).
     3. Stale-While-Revalidate (returns stale item fast while silently refreshing).
 """
+
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
-import asyncio
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, TypeVar, Callable, Coroutine, Dict
+from typing import Any, TypeVar
 
 from cachetools import LRUCache
+
 from centrag.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,15 +33,13 @@ DEFAULT_MAX_LIMIT_BYTES = 25 * 1024 * 1024  # 25 MB max memory heap for RAG cach
 @dataclass
 class SWR_CacheEntry:
     """Wrapper for items stored in the internal LRU to track staleness."""
+
     value: Any
     timestamp: float
     refreshing: bool
 
 
-def memoize_with_ttl_async(
-    ttl_seconds: int = 300,
-    max_size_bytes: int = DEFAULT_MAX_LIMIT_BYTES
-):
+def memoize_with_ttl_async(ttl_seconds: int = 300, max_size_bytes: int = DEFAULT_MAX_LIMIT_BYTES):
     """
     Decorator implementing Stale-While-Revalidate (SWR) and In-Flight Request Collapsing.
 
@@ -48,7 +49,7 @@ def memoize_with_ttl_async(
         3. Stale-While-Revalidate (returns stale item fast while silently background refreshing).
     """
     cache = LRUCache(maxsize=max_size_bytes, getsizeof=lambda x: sys.getsizeof(x.value))
-    in_flight: Dict[str, asyncio.Task] = {}
+    in_flight: dict[str, asyncio.Task] = {}
 
     def decorator(func: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., Coroutine[Any, Any, T]]:
         async def wrapper(*args, **kwargs):
@@ -66,11 +67,7 @@ def memoize_with_ttl_async(
                 try:
                     result = await task
                     if in_flight.get(key) is task:
-                        cache[key] = SWR_CacheEntry(
-                            value=result,
-                            timestamp=now,
-                            refreshing=False
-                        )
+                        cache[key] = SWR_CacheEntry(value=result, timestamp=now, refreshing=False)
                     return result
                 finally:
                     if in_flight.get(key) is task:
@@ -84,11 +81,7 @@ def memoize_with_ttl_async(
                     try:
                         new_val = await func(*args, **kwargs)
                         if cache.get(key) is cached:
-                            cache[key] = SWR_CacheEntry(
-                                value=new_val,
-                                timestamp=time.time(),
-                                refreshing=False
-                            )
+                            cache[key] = SWR_CacheEntry(value=new_val, timestamp=time.time(), refreshing=False)
                     except asyncio.CancelledError:
                         pass
                     except Exception as e:
@@ -101,4 +94,5 @@ def memoize_with_ttl_async(
             return cached.value
 
         return wrapper
+
     return decorator

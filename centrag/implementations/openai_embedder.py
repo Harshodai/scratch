@@ -16,13 +16,12 @@ Credentials: Set OPENAI_API_KEY environment variable or pass directly.
 
 Required: pip install openai
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 from centrag.utils.logger import get_logger
-
-from centrag.abstractions.embedder import EmbedderProtocol
 
 logger = get_logger("implementations.embedder.openai")
 

@@ -14,9 +14,10 @@ Ingestion package — Unified document ingestion for dual-path RAG.
 │  The user uploads ONCE; both paths get populated automatically.    │
 └─────────────────────────────────────────────────────────────────────┘
 """
-from centrag.ingestion.service import IngestionService, IngestionResult
-from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig, CleaningResult
-from centrag.ingestion.worker import IngestionWorker, IngestionJob, WorkerConfig, JobStatus
+
+from centrag.ingestion.cleaner import CleaningResult, DocumentCleaner, DocumentCleanerConfig
+from centrag.ingestion.service import IngestionResult, IngestionService
+from centrag.ingestion.worker import IngestionJob, IngestionWorker, JobStatus, WorkerConfig
 
 __all__ = [
     "IngestionService",
