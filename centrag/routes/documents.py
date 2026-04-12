@@ -1,27 +1,32 @@
-"""
-Document management routes — upload, list, delete documents.
+"""Document Management API — The Ingestion Gateway.
 
-SHARED INFRASTRUCTURE: These routes feed BOTH retrieval paths.
+The WHY:
+    A RAG system is only as good as the data it contains. This module
+    manages the lifecycle of knowledge: from raw binary upload to
+    structured, searchable wisdom. It orchestrates the transformation
+    of unstructured files into both "Atomic Chunks" (for Vector RAG)
+    and "Hierarchical Trees" (for Agentic Reasoning).
 
-When a document is uploaded:
-    1. IngestionService parses and cleans it
-    2. VECTORLESS path: PageIndex tree is built
-    3. VECTOR path: chunks are embedded and stored (Day 3)
-
-SOLID: Single Responsibility — only document CRUD. No retrieval logic.
-
-All routes require auth (RequestContext injected via Depends).
+Security Pattern:
+    TENANT ISOLATION — Every document operation is scoped by the
+    `RequestContext`. This ensures that Team A can never see, list,
+    or retrieve documents belonging to Team B, even if they guess
+     the document UUID.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, Request, UploadFile
 from pydantic import BaseModel
 
-from centrag.ingestion.service import IngestionService
-from centrag.middleware import RequestContext
 from centrag.middleware.auth import resolve_api_key
-from centrag.storage.document_store import DocumentStore
+
+if TYPE_CHECKING:
+    from centrag.ingestion.service import IngestionService
+    from centrag.middleware import RequestContext
+    from centrag.storage.document_store import DocumentStore
 
 router = APIRouter(tags=["documents"])
 

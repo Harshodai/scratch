@@ -21,13 +21,16 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-from centrag.abstractions.llm import LLMProtocol, LLMResponse, QueryComplexity
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from centrag.abstractions.llm import LLMProtocol, LLMResponse, QueryComplexity
 
 logger = get_logger("llm_gateway")
 
@@ -35,7 +38,7 @@ logger = get_logger("llm_gateway")
 # ── Circuit Breaker ─────────────────────────────────────────────────
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     """Circuit breaker states."""
 
     CLOSED = "closed"  # Normal operation
@@ -53,14 +56,20 @@ class CircuitBreakerConfig:
 
 
 class CircuitBreaker:
-    """
-    Circuit breaker for LLM API calls.
+    """Intelligent fail-fast mechanism for external API dependencies.
 
-    State transitions:
-        CLOSED → OPEN: after `failure_threshold` consecutive failures
-        OPEN → HALF_OPEN: after `recovery_timeout` seconds
-        HALF_OPEN → CLOSED: after `success_threshold` consecutive successes
-        HALF_OPEN → OPEN: on any failure
+    The WHY:
+        External LLM providers (AWS, OpenAI) can experience downtime or
+        latency spikes. Without a circuit breaker, a failing provider
+        could exhaust the CentRAG connection pool and crash the
+        entire platform. This implementation "trips" the circuit after
+        consecutive failures, rejecting calls immediately to allow
+        the provider time to recover and preserving system stability.
+
+    State Transitions:
+        - CLOSED: Normal operation.
+        - OPEN: Rejects all calls (tripped).
+        - HALF_OPEN: Allows a trial call to test recovery.
     """
 
     def __init__(self, config: CircuitBreakerConfig | None = None) -> None:
@@ -129,10 +138,14 @@ class CostRecord:
 
 
 class CostTracker:
-    """
-    In-memory per-team cost tracking with budget enforcement.
+    """Usage and budget enforcement for multi-tenant token economies.
 
-    Production: Replace with Redis-backed tracker for multi-process.
+    The WHY:
+        LLM credits are a "Real World Cost". To prevent a single
+        tenant from consuming the entire platform budget (or
+        protecting against infinite loop bugs), we track every
+        token and enforce a hard USD ceiling. This ensures
+        financial predictability for the platform operator.
     """
 
     # Model pricing (input $/1M tokens, output $/1M tokens)
@@ -207,10 +220,13 @@ class CostTracker:
 
 
 class LatencyMonitor:
-    """
-    Simple latency histogram for LLM calls.
+    """Performance feedback loop for LLM responsiveness.
 
-    Tracks percentiles (P50, P95, P99) over a sliding window.
+    The WHY:
+        In an enterprise RAG system, P99 latency is often more critical
+        than average speed. This monitor provides the data needed
+        for Adaptive RAG to decide when to switch to a faster (though
+        less capable) model to maintain the user experience.
     """
 
     def __init__(self, window_size: int = 100) -> None:
@@ -259,21 +275,24 @@ class ModelRoutingConfig:
 
 
 class LLMGateway:
-    """
-    Production LLM proxy with resilience and observability.
+    """Production-hardened proxy for LLM interactions.
 
-    Wraps any LLMProtocol with:
-        - Circuit breaker (prevent cascading failures)
-        - Cost tracking (per-team budgets)
-        - Latency monitoring (P50/P95/P99)
-        - Retry with backoff (transient recovery)
+    The WHY:
+        Raw LLM protocols are brittle. This gateway wraps our AI
+        engines with enterprise-grade resilience. It provides a
+        single "Safe LLM" object that handles:
+        1. Financial Safety: (CostTracker)
+        2. System Stability: (CircuitBreaker)
+        3. Performance Insight: (LatencyMonitor)
+        4. Reliability: (Exponential Backoff Retries)
 
-    SOLID: Decorator Pattern — LLMGateway IS-A LLMProtocol.
+    Design Pattern:
+        DECORATOR — It IS-A LLMProtocol, making it a drop-in
+        replacement in `wiring.py` for any raw LLM provider.
 
     Usage:
-        llm = NoOpLLM()
-        gateway = LLMGateway(llm, team_id="team-1")
-        response = await gateway.generate("What is X?", ["context..."])
+        gateway = LLMGateway(bedrock_llm, team_id="acme_corp")
+        response = await gateway.generate(...)  # Now with safety!
     """
 
     def __init__(

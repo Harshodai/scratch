@@ -21,13 +21,24 @@ NOOP_DIMENSION = 1024  # Match Titan Embed v2 default
 
 
 class NoOpEmbedder:
-    """
-    Deterministic fake embedder for development.
+    """Deterministic Mock Embedder for architectural testing.
 
-    Generates reproducible vectors based on text hash — same text
-    always produces the same vector, enabling consistent test results.
+    The WHY:
+        Embedding models (Bedrock, OpenAI) are non-deterministic and
+        require internet access. For unit testing the `VectorStore`
+        or `RetrievalEngine`, we need stable, repeatable vectors.
+        The NoOpEmbedder hashes the input text into a stable seed,
+        ensuring that the same word "Apple" always produces the exact
+        same 1024-dimensional vector, even across different runs.
 
-    Implements EmbedderProtocol.
+    Design Pattern:
+        MOCK — Implements `EmbedderProtocol` to isolate the
+        application logic from the vagaries of external AI models.
+
+    Usage:
+        embedder = NoOpEmbedder(dimension=1536)
+        # Always returns the same vector for the same string
+        v1 = await embedder.embed_query("repeatable text")
     """
 
     def __init__(self, dimension: int = NOOP_DIMENSION) -> None:

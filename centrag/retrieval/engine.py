@@ -32,19 +32,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from centrag.abstractions import (
-    CacheProtocol,
-    EmbedderProtocol,
-    LLMProtocol,
-    MemoryProtocol,
-    RerankerProtocol,
-    VectorStoreProtocol,
-)
 from centrag.abstractions.cache import CacheTier
-from centrag.abstractions.embedder import SparseEmbedderProtocol
 from centrag.abstractions.guardrail import (
     InputRailProtocol,
     OutputRailProtocol,
@@ -53,15 +43,28 @@ from centrag.abstractions.guardrail import (
 from centrag.abstractions.retrieval import RetrievalRequest, RetrievalResponse, SourceChunk
 from centrag.abstractions.vectorstore import VectorFilter
 from centrag.config import get_settings
-from centrag.middleware import RequestContext
 from centrag.observability import (
     CostTrackingProtocol,
     MetricsProtocol,
     SpanKind,
     TracingProtocol,
 )
-from centrag.retrieval.generator import TwoPassGenerator
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable
+
+    from centrag.abstractions import (
+        CacheProtocol,
+        EmbedderProtocol,
+        LLMProtocol,
+        MemoryProtocol,
+        RerankerProtocol,
+        VectorStoreProtocol,
+    )
+    from centrag.abstractions.embedder import SparseEmbedderProtocol
+    from centrag.middleware import RequestContext
+    from centrag.retrieval.generator import TwoPassGenerator
 
 logger = get_logger()
 
@@ -72,18 +75,30 @@ logger = get_logger()
 
 
 class TokenBudgetManager:
-    """
-    Agentic Context Compression (Pattern 8).
-    Dynamically tracks the context building window to prevent API truncation limits.
+    """Agentic Context Compression (Pattern 8).
+
+    The WHY:
+        LLMs have hard physical limits on context window size (e.g., 128k
+        tokens). However, sending too much noise degrades retrieval
+        quality. This manager ensures we only pack the highest-value
+        chunks into the prompt, preventing API truncation errors and
+        reducing inference costs.
     """
 
     def __init__(self, max_budget: int = 3000):
         self.max_budget = max_budget
 
     def fit_context(self, sources: list[SourceChunk]) -> list[SourceChunk]:
+        """Prunes the source list to fit within the token budget.
+
+        Highest relevance chunks are preserved first.
+        """
+        # Sort by relevance to ensure budget is spent on high-value context
+        sorted_sources = sorted(sources, key=lambda x: x.relevance_score, reverse=True)
+
         fitted = []
         current_cost = 0.0
-        for chunk in sources:
+        for chunk in sorted_sources:
             cost = len(chunk.content.split()) * 1.3  # simple estimation
             if current_cost + cost <= self.max_budget:
                 fitted.append(chunk)
@@ -99,15 +114,25 @@ class TokenBudgetManager:
 
 
 class RetrievalEngine:
-    """
-    Core RAG pipeline with Adaptive + Corrective RAG patterns.
+    """Core RAG Orchestrator implementing Adaptive & Corrective patterns.
 
-    SOLID: Single Responsibility — orchestrates retrieval, doesn't implement any component.
-           Guardrails are INJECTED, not called inline. This class only sequences steps.
-    SOLID: Dependency Inversion — depends on Protocols, not concrete classes.
-    SOLID: Open/Closed — add new retrieval strategies without modifying this class.
+    The WHY:
+        This is the central nervous system of CentRAG. It doesn't
+        implement retrieval logic; it orchestrates swappable strategies.
+        It integrates Input/Output Guardrails, Tiered Caching, and
+        Corrective RAG (CRAG) fallbacks to ensure that even if the
+        initial search fails, the system "re-thinks" the query to
+        recover relevant data.
 
-    All dependencies are injected via __init__ (constructor injection).
+    Design Patterns:
+        - CHAIN OF RESPONSIBILITY: Middleware pipeline execution.
+        - STRATEGY: Swappable Embedders, LLMs, and VectorStores.
+        - FACADE: Provides a single `retrieve()` entry point for agents.
+
+    Usage:
+        engine = RetrievalEngine(...)
+        response = await engine.retrieve(request, context)
+        print(f"Answer: {response.answer}")
     """
 
     def __init__(
@@ -449,7 +474,11 @@ class RetrievalEngine:
                 context_texts = memory_context + context_texts
 
             # Pattern 10: Adaptive Thinking Prompting
-            adaptive_prompt = f"{sanitized_query}\n\n<search_strategy>Explain your retrieval rationale here.</search_strategy>\n<evaluation>Evaluate the context here.</evaluation>\n"
+            adaptive_prompt = (
+                f"{sanitized_query}\n\n"
+                "<search_strategy>Explain your retrieval rationale here.</search_strategy>\n"
+                "<evaluation>Evaluate the context here.</evaluation>\n"
+            )
 
             llm_response = await self._llm.generate(
                 prompt=adaptive_prompt,

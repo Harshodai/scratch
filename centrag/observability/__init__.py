@@ -34,19 +34,20 @@ FREE Observability Options (ranked by production readiness):
 from __future__ import annotations
 
 import time
-from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 # =============================================================================
 # Data Types
 # =============================================================================
 
 
-class SpanKind(str, Enum):
+class SpanKind(StrEnum):
     RETRIEVAL = "retrieval"
     EMBEDDING = "embedding"
     GENERATION = "generation"

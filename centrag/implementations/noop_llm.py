@@ -10,22 +10,36 @@ Production replacement: BedrockLLM, OpenAILLM, or LocalLLM.
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from centrag.abstractions.llm import LLMResponse, QueryComplexity
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = get_logger("implementations.llm.noop")
 
 
 class NoOpLLM:
-    """
-    Template-based LLM for development/testing.
+    """Deterministic Mock LLM for local development and testing.
 
-    Generates structured responses from context without an API call.
-    Useful for validating the full pipeline flow.
+    The WHY:
+        Enterprise RAG systems are expensive and slow to test with real
+        APIs. The NoOpLLM provides a "Zero-Cost" development path,
+        allowing developers to test pipeline logic, UI state transitions,
+        and integration flows without hitting AWS or OpenAI. It
+        generates deterministic responses based on the provided
+        context, ensuring that tests are repeatable and fast.
 
-    Implements LLMProtocol.
+    Design Pattern:
+        MOCK / STUB — Implements `LLMProtocol` but returns
+        static/template content instead of calling a remote model.
+
+    Usage:
+        llm = NoOpLLM()
+        # Returns a mock response summarizing the context
+        resp = await llm.generate("How do I X?", ["Source 1", "Source 2"])
     """
 
     def __init__(

@@ -30,15 +30,17 @@ Docker Compose for backends:
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from centrag.observability import (
     SpanContext,
     SpanKind,
 )
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = get_logger("observability.otel")
 
@@ -168,7 +170,6 @@ class OTelMetrics:
         if self._meter is None:
             try:
                 from opentelemetry import metrics
-                from opentelemetry.sdk.metrics import MeterProvider
 
                 self._meter = metrics.get_meter(self._service_name)
                 logger.info("otel_meter_initialized")

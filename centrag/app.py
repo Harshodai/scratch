@@ -21,19 +21,22 @@ SOLID: Single Responsibility — app.py only wires things together.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from centrag.config import Settings, get_settings
 from centrag.ingestion.worker import IngestionWorker, WorkerConfig
-from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
+
 from centrag.middleware.rate_limiter import SimpleRateLimitMiddleware
 from centrag.storage.document_store import DocumentStore
 from centrag.utils.logger import get_logger
 from centrag.wiring import build_ingestion_service, build_retrieval_engine
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = get_logger()
 
@@ -141,12 +144,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             from mcp.server.fastmcp import FastMCP
 
+            from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
+
             mcp_server = FastMCP("CentRAG-Retriever")
             register_rag_tools(mcp_server, app.state.retrieval_engine)
             app.state.mcp_server = mcp_server
             logger.info("mcp_server_initialized", name="CentRAG-Retriever")
-        except ImportError:
-            logger.warning("mcp_init_failed", error="fastmcp not installed")
+        except ImportError as e:
+            logger.warning("mcp_init_failed", error=str(e), package="mcp")
 
     logger.info(
         "centrag_ready",
@@ -211,7 +216,9 @@ def create_app() -> FastAPI:
 
     # --- Routes ---
     from centrag.routes.feedback import router as feedback_router
+    from centrag.routes.health import router as health_router
     from centrag.routes.retrieve import router as retrieve_router
+    from centrag.routes.documents import router as documents_router
 
     app.include_router(health_router)
     app.include_router(feedback_router, prefix="/v1")

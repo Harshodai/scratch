@@ -25,28 +25,30 @@ Connection:
 from __future__ import annotations
 
 import json
-import asyncio
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import oracledb
 import structlog
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-
-from mcp_enterprise_server.config import GOSDBConfig, PermissionLevel
 from mcp_enterprise_server.guardrails import (
     QueryValidationError,
-    validate_sql_query,
-    validate_schema_access,
+    audit_log,
+    cap_result_size,
     check_rate_limit,
     redact_pii,
-    cap_result_size,
-    audit_log,
+    validate_schema_access,
+    validate_sql_query,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from mcp.server.fastmcp import Context, FastMCP
+    from mcp.server.session import ServerSession
+
+    from mcp_enterprise_server.config import GOSDBConfig
 
 logger = structlog.get_logger("gosdb_mcp")
 
@@ -64,7 +66,7 @@ class GOSDBPool:
 
     def __init__(self, config: GOSDBConfig):
         self._config = config
-        self._pool: Optional[oracledb.AsyncConnectionPool] = None
+        self._pool: oracledb.AsyncConnectionPool | None = None
 
     async def initialize(self) -> None:
         """Create the async connection pool."""
@@ -113,8 +115,8 @@ class GOSDBPool:
     async def execute_query(
         self,
         query: str,
-        params: Optional[dict[str, Any]] = None,
-        max_rows: Optional[int] = None,
+        params: dict[str, Any] | None = None,
+        max_rows: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Execute a SELECT query and return results as list of dicts.
@@ -123,28 +125,27 @@ class GOSDBPool:
         """
         effective_max_rows = max_rows or self._config.max_rows_per_query
 
-        async with self.get_connection() as conn:
-            async with conn.cursor() as cursor:
-                if params:
-                    await cursor.execute(query, params)
-                else:
-                    await cursor.execute(query)
+        async with self.get_connection() as conn, conn.cursor() as cursor:
+            if params:
+                await cursor.execute(query, params)
+            else:
+                await cursor.execute(query)
 
-                columns = [col[0] for col in cursor.description] if cursor.description else []
-                rows = await cursor.fetchmany(effective_max_rows)
+            columns = [col[0] for col in cursor.description] if cursor.description else []
+            rows = await cursor.fetchmany(effective_max_rows)
 
-                results = [dict(zip(columns, row)) for row in rows]
+            results = [dict(zip(columns, row, strict=False)) for row in rows]
 
-                # Check if there are more rows
-                extra = await cursor.fetchone()
-                if extra:
-                    logger.warning(
-                        "query_result_truncated",
-                        max_rows=effective_max_rows,
-                        query_preview=query[:100],
-                    )
+            # Check if there are more rows
+            extra = await cursor.fetchone()
+            if extra:
+                logger.warning(
+                    "query_result_truncated",
+                    max_rows=effective_max_rows,
+                    query_preview=query[:100],
+                )
 
-                return results
+            return results
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +154,7 @@ class GOSDBPool:
 @dataclass
 class GOSDBAppContext:
     """Typed application context carrying the GOS DB pool."""
+
     pool: GOSDBPool
     config: GOSDBConfig
 
@@ -164,7 +166,7 @@ async def query_gosdb(
     query: str,
     schema: str = "APP_DATA",
     max_rows: int = 1000,
-    params: Optional[dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
     *,  # Force keyword args below
     pool: GOSDBPool,
     config: GOSDBConfig,
@@ -191,6 +193,7 @@ async def query_gosdb(
         )
     """
     import time
+
     start = time.monotonic()
 
     try:
@@ -201,9 +204,7 @@ async def query_gosdb(
         validate_schema_access(schema, config.allowed_schemas)
 
         # 3. Validate SQL query
-        validated_query = validate_sql_query(
-            query, config.blocked_keywords, config.permission_level
-        )
+        validated_query = validate_sql_query(query, config.blocked_keywords, config.permission_level)
 
         # 4. Enforce max_rows cap
         effective_max = min(max_rows, config.max_rows_per_query)
@@ -234,9 +235,12 @@ async def query_gosdb(
         # 9. Audit
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "query_gosdb", caller_id,
+            "query_gosdb",
+            caller_id,
             {"query": query[:200], "schema": schema, "max_rows": effective_max},
-            f"{len(results)} rows returned", True, duration,
+            f"{len(results)} rows returned",
+            True,
+            duration,
         )
 
         return response_str
@@ -244,9 +248,13 @@ async def query_gosdb(
     except (QueryValidationError, Exception) as e:
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "query_gosdb", caller_id,
+            "query_gosdb",
+            caller_id,
             {"query": query[:200], "schema": schema},
-            "", False, duration, error=str(e),
+            "",
+            False,
+            duration,
+            error=str(e),
         )
         raise
 

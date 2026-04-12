@@ -13,13 +13,12 @@ Key Principles:
 
 from __future__ import annotations
 
-import time
 import threading
-from typing import Optional
+import time
 
 import boto3
-from botocore.config import Config as BotoConfig
 import structlog
+from botocore.config import Config as BotoConfig
 
 logger = structlog.get_logger("aws_credentials")
 
@@ -35,10 +34,10 @@ class AWSCredentialManager:
     def __init__(
         self,
         region: str,
-        role_arn: Optional[str] = None,
+        role_arn: str | None = None,
         session_name: str = "MCPEnterpriseSession",
         session_duration: int = 3600,
-        endpoint_url: Optional[str] = None,
+        endpoint_url: str | None = None,
     ):
         self._region = region
         self._role_arn = role_arn
@@ -48,7 +47,7 @@ class AWSCredentialManager:
 
         # Cached session + expiry
         self._lock = threading.Lock()
-        self._cached_session: Optional[boto3.Session] = None
+        self._cached_session: boto3.Session | None = None
         self._session_expiry: float = 0.0
 
         # Boto retry config

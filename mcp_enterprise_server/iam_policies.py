@@ -11,8 +11,8 @@ Export them via `json.dumps()` and apply via CloudFormation, CDK, or console.
 """
 
 from __future__ import annotations
-import json
 
+import json
 
 # ---------------------------------------------------------------------------
 # DynamoDB — Read-Only Policy
@@ -31,16 +31,10 @@ DYNAMODB_READ_ONLY_POLICY = {
                 "dynamodb:DescribeTable",
                 "dynamodb:ListTables",
             ],
-            "Resource": [
-                "arn:aws:dynamodb:*:ACCOUNT_ID:table/*"
-            ],
-            "Condition": {
-                "StringEquals": {
-                    "aws:RequestedRegion": ["us-east-1", "us-west-2"]
-                }
-            }
+            "Resource": ["arn:aws:dynamodb:*:ACCOUNT_ID:table/*"],
+            "Condition": {"StringEquals": {"aws:RequestedRegion": ["us-east-1", "us-west-2"]}},
         },
-    ]
+    ],
 }
 
 
@@ -80,7 +74,7 @@ DYNAMODB_READ_WRITE_POLICY = {
             ],
             "Resource": "*",
         },
-    ]
+    ],
 }
 
 
@@ -103,9 +97,7 @@ ATHENA_READ_ONLY_POLICY = {
                 "athena:GetTableMetadata",
                 "athena:ListQueryExecutions",
             ],
-            "Resource": [
-                "arn:aws:athena:*:ACCOUNT_ID:workgroup/primary"
-            ],
+            "Resource": ["arn:aws:athena:*:ACCOUNT_ID:workgroup/primary"],
         },
         {
             "Sid": "MCPAthenaS3Results",
@@ -137,7 +129,7 @@ ATHENA_READ_ONLY_POLICY = {
                 "arn:aws:glue:*:ACCOUNT_ID:table/*/*",
             ],
         },
-    ]
+    ],
 }
 
 
@@ -150,17 +142,11 @@ MCP_SERVER_TRUST_POLICY = {
         {
             "Sid": "AllowMCPServerAssumeRole",
             "Effect": "Allow",
-            "Principal": {
-                "AWS": "arn:aws:iam::ACCOUNT_ID:role/MCP-Server-EC2-Role"
-            },
+            "Principal": {"AWS": "arn:aws:iam::ACCOUNT_ID:role/MCP-Server-EC2-Role"},
             "Action": "sts:AssumeRole",
-            "Condition": {
-                "StringEquals": {
-                    "sts:ExternalId": "mcp-enterprise-server"
-                }
-            },
+            "Condition": {"StringEquals": {"sts:ExternalId": "mcp-enterprise-server"}},
         }
-    ]
+    ],
 }
 
 
@@ -187,11 +173,7 @@ S3_READ_ONLY_POLICY = {
                 "arn:aws:s3:::ALLOWED_BUCKET_2",
                 "arn:aws:s3:::ALLOWED_BUCKET_2/*",
             ],
-            "Condition": {
-                "StringEquals": {
-                    "aws:RequestedRegion": ["us-east-1", "us-west-2"]
-                }
-            }
+            "Condition": {"StringEquals": {"aws:RequestedRegion": ["us-east-1", "us-west-2"]}},
         },
         {
             "Sid": "MCPS3ListAllBuckets",
@@ -212,7 +194,7 @@ S3_READ_ONLY_POLICY = {
             ],
             "Resource": "*",
         },
-    ]
+    ],
 }
 
 
@@ -222,6 +204,7 @@ S3_READ_ONLY_POLICY = {
 def export_policies(output_dir: str = ".") -> None:
     """Export all IAM policies as JSON files for CloudFormation/CDK use."""
     import os
+
     os.makedirs(output_dir, exist_ok=True)
 
     policies = {

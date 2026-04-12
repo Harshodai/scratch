@@ -18,16 +18,18 @@ SOLID: Open/Closed — add new routing heuristics without modifying retrieval co
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-from centrag.storage.document_store import DocumentStore
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.storage.document_store import DocumentStore
 
 logger = get_logger("retrieval.router")
 
 
-class RetrievalPath(str, Enum):
+class RetrievalPath(StrEnum):
     """The retrieval path selected by the router."""
 
     VECTOR = "vector"  # Similarity-based (embeddings + Qdrant)

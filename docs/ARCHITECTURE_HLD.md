@@ -3,7 +3,7 @@
 **Version:** 2.0  
 **Author:** Platform Engineering  
 **Status:** Draft → Review  
-**Last Updated:** 2026-03-31  
+**Last Updated:** 2026-04-13  
 
 ---
 
@@ -65,6 +65,14 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 12 | **LLM-Driven Agent Selection** | The LLM itself decides the orchestration strategy at query time. Based on query complexity, it routes to: cache-only (SIMPLE), standard RAG (STANDARD), multi-step retrieval (COMPLEX), or full multi-agent orchestration (RESEARCH). This replaces static routing with dynamic, context-aware selection. See `CROSS_REPO_ANALYSIS.md §3`. |
 | 13 | **Context Engineering** | Aggressive context management: isolated sub-agent contexts, mid-session summarization, memory compression, and progressive skill loading. Inspired by DeerFlow's context summarization and AgentScope's memory compression. See `LEARNING_AND_ROADMAP.md Phase 2`. |
 | 14 | **MCP-First Integration** | All external data source connections (Oracle GOS DB, DynamoDB, Confluence, etc.) are exposed as MCP servers using stdio transport. The retrieval engine acts as an MCP client. This standardizes all integrations via the Model Context Protocol. See `MCP_DEPLOYMENT_GUIDE.md`. |
+| 15 | **Deep Immutability** | Core document abstractions enforce strict read-only state at the application level to prevent accidental mutation during retrieval/ingestion flows (e.g., `ExtractedDocument`). |
+| 16 | **Fail-Fast Configuration** | Boot-time validators reject non-production infrastructure URLs (e.g., `localhost`) when the system is in `production` mode, preventing silent configuration leaks. |
+
+### 2.3 Development Practices
+
+| Principle | Implementation |
+|-----------|----------------|
+| **Agentic Self-Correction** | A suite of specialized quality gates in `.agents/skills/` autonomously validates every code change against SOLID, security, and architectural standards during the development lifecycle. |
 *   **Storage (S3)**: Encrypted at rest via AES-256 (KMS). Use **Envelope Encryption** for document chunks where possible (Phase 5).
 *   **Database (Aurora/Qdrant)**: Full disk encryption via AWS managed keys. Support for **Customer Managed Keys (CMK / BYOK)** at the Enterprise tier.
 

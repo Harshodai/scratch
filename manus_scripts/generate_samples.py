@@ -2,13 +2,14 @@
 """Generate sample files for RAG system testing."""
 
 import os
+
 import pandas as pd
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 os.makedirs("/home/ubuntu/sample_files", exist_ok=True)
 
@@ -18,7 +19,7 @@ doc = SimpleDocTemplate(pdf_path, pagesize=letter)
 story = []
 styles = getSampleStyleSheet()
 
-title = Paragraph("Quantum Computing: A Comprehensive Guide", styles['Title'])
+title = Paragraph("Quantum Computing: A Comprehensive Guide", styles["Title"])
 story.append(title)
 story.append(Spacer(1, 0.3 * 72))
 
@@ -38,34 +39,38 @@ Applications:
 - Machine Learning: Quantum machine learning algorithms
 """
 
-for line in content.split('\n'):
+for line in content.split("\n"):
     if line.strip():
-        story.append(Paragraph(line, styles['Normal']))
+        story.append(Paragraph(line, styles["Normal"]))
         story.append(Spacer(1, 0.1 * 72))
 
 story.append(Spacer(1, 0.2 * 72))
-story.append(Paragraph("Quantum vs Classical Computers", styles['Heading2']))
+story.append(Paragraph("Quantum vs Classical Computers", styles["Heading2"]))
 story.append(Spacer(1, 0.1 * 72))
 
 data = [
-    ['Aspect', 'Classical', 'Quantum'],
-    ['Basic Unit', 'Bit (0/1)', 'Qubit (0/1/both)'],
-    ['Processing', 'Sequential', 'Parallel (Superposition)'],
-    ['Speed', 'Exponential for some problems', 'Polynomial for some problems'],
-    ['Error Rate', 'Low', 'High (Decoherence)'],
+    ["Aspect", "Classical", "Quantum"],
+    ["Basic Unit", "Bit (0/1)", "Qubit (0/1/both)"],
+    ["Processing", "Sequential", "Parallel (Superposition)"],
+    ["Speed", "Exponential for some problems", "Polynomial for some problems"],
+    ["Error Rate", "Low", "High (Decoherence)"],
 ]
 
 table = Table(data)
-table.setStyle(TableStyle([
-    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    ('FONTSIZE', (0, 0), (-1, 0), 14),
-    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    ('GRID', (0, 0), (-1, -1), 1, colors.black),
-]))
+table.setStyle(
+    TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 14),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+            ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ]
+    )
+)
 story.append(table)
 
 doc.build(story)
@@ -74,43 +79,51 @@ print(f"✓ Created PDF: {pdf_path}")
 # ===== 2. Create a Multi-Sheet Excel File =====
 xlsx_path = "/home/ubuntu/sample_files/sample_data.xlsx"
 
-with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
+with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
     # Sheet 1: Financial Data
-    df1 = pd.DataFrame({
-        'Quarter': ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q4 2024'],
-        'Revenue': [1200000, 1450000, 1680000, 1920000],
-        'Expenses': [800000, 920000, 1050000, 1200000],
-        'Profit': [400000, 530000, 630000, 720000],
-    })
-    df1.to_excel(writer, sheet_name='Financial', index=False)
-    
+    df1 = pd.DataFrame(
+        {
+            "Quarter": ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024"],
+            "Revenue": [1200000, 1450000, 1680000, 1920000],
+            "Expenses": [800000, 920000, 1050000, 1200000],
+            "Profit": [400000, 530000, 630000, 720000],
+        }
+    )
+    df1.to_excel(writer, sheet_name="Financial", index=False)
+
     # Sheet 2: Product Sales
-    df2 = pd.DataFrame({
-        'Product': ['Widget A', 'Widget B', 'Widget C', 'Widget D', 'Widget E'],
-        'Units Sold': [5000, 7200, 3400, 8900, 6100],
-        'Price per Unit': [25.50, 18.75, 42.00, 15.25, 31.99],
-        'Total Revenue': [127500, 135000, 142800, 135725, 195099],
-    })
-    df2.to_excel(writer, sheet_name='Products', index=False)
-    
+    df2 = pd.DataFrame(
+        {
+            "Product": ["Widget A", "Widget B", "Widget C", "Widget D", "Widget E"],
+            "Units Sold": [5000, 7200, 3400, 8900, 6100],
+            "Price per Unit": [25.50, 18.75, 42.00, 15.25, 31.99],
+            "Total Revenue": [127500, 135000, 142800, 135725, 195099],
+        }
+    )
+    df2.to_excel(writer, sheet_name="Products", index=False)
+
     # Sheet 3: Customer Data
-    df3 = pd.DataFrame({
-        'Customer ID': ['C001', 'C002', 'C003', 'C004', 'C005'],
-        'Name': ['Acme Corp', 'TechStart Inc', 'Global Solutions', 'Innovation Labs', 'Future Systems'],
-        'Location': ['New York', 'San Francisco', 'London', 'Tokyo', 'Berlin'],
-        'Annual Spend': [450000, 320000, 280000, 510000, 195000],
-        'Account Status': ['Active', 'Active', 'Inactive', 'Active', 'Pending'],
-    })
-    df3.to_excel(writer, sheet_name='Customers', index=False)
-    
+    df3 = pd.DataFrame(
+        {
+            "Customer ID": ["C001", "C002", "C003", "C004", "C005"],
+            "Name": ["Acme Corp", "TechStart Inc", "Global Solutions", "Innovation Labs", "Future Systems"],
+            "Location": ["New York", "San Francisco", "London", "Tokyo", "Berlin"],
+            "Annual Spend": [450000, 320000, 280000, 510000, 195000],
+            "Account Status": ["Active", "Active", "Inactive", "Active", "Pending"],
+        }
+    )
+    df3.to_excel(writer, sheet_name="Customers", index=False)
+
     # Sheet 4: Market Analysis
-    df4 = pd.DataFrame({
-        'Region': ['North America', 'Europe', 'Asia Pacific', 'Latin America', 'Middle East'],
-        'Market Size (M)': [2500, 1800, 3200, 600, 400],
-        'Growth Rate (%)': [8.5, 5.2, 12.1, 6.8, 9.3],
-        'Competitors': [12, 8, 15, 5, 3],
-    })
-    df4.to_excel(writer, sheet_name='Market', index=False)
+    df4 = pd.DataFrame(
+        {
+            "Region": ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"],
+            "Market Size (M)": [2500, 1800, 3200, 600, 400],
+            "Growth Rate (%)": [8.5, 5.2, 12.1, 6.8, 9.3],
+            "Competitors": [12, 8, 15, 5, 3],
+        }
+    )
+    df4.to_excel(writer, sheet_name="Market", index=False)
 
 print(f"✓ Created Multi-Sheet Excel: {xlsx_path}")
 
@@ -241,9 +254,9 @@ This guide covers essential best practices for implementing machine learning sys
 Following these practices ensures robust, maintainable, and effective machine learning systems.
 """
 
-with open(md_path, 'w') as f:
+with open(md_path, "w") as f:
     f.write(md_content)
 print(f"✓ Created Markdown: {md_path}")
 
 print("\n✓ All sample files created successfully!")
-print(f"Files location: /home/ubuntu/sample_files/")
+print("Files location: /home/ubuntu/sample_files/")

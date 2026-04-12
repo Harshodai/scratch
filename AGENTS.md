@@ -46,11 +46,14 @@ Use these `make` commands to verify your changes before completion.
 All settings use Pydantic with `CENTRAG_` prefix:
 - `CENTRAG_ENABLE_CONTEXTUAL_RETRIEVAL`: 2024 Anthropic situated context.
 - `CENTRAG_ENABLE_CONTEXTUAL_COMPRESSION`: Dynamic LLM-based context refinement.
+- `CENTRAG_LOG_RENDERER`: 'json' for production (ELK/Datadog), 'console' for human-readable dev logs.
 
 ### Rules of Engagement
 - **No Side Effects**: Never add logic to `models.py`.
-- **Isolation**: Every cache and retrieval operation must be team-scoped.
+- **Isolation**: Every cache and retrieval operation must be team-scoped. `search()` must ALWAYS include a mandatory `team_id` filter (enforced at runtime).
+- **Hardening**: Use deep immutability (frozen dataclasses + MappingProxyType) for core document abstractions.
 - **Logging**: Use `structlog`, never `print()` or stdlib `logging`.
+- **Documentation**: Use "The WHY" docstring style (Google Style + architectural rationale).
 - **Maintenance**: Follow the **Post-Change Ritual** in [MAINTENANCE.md](docs/MAINTENANCE.md).
 
 ---

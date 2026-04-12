@@ -19,7 +19,7 @@ Design Pattern: VALUE OBJECT (DDD) — identity-less, immutable, equality by val
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 
 
 @dataclass(frozen=True)

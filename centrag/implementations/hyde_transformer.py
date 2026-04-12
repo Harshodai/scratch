@@ -10,20 +10,38 @@ from __future__ import annotations
 
 import json
 import re
+from typing import TYPE_CHECKING
 
-from centrag.abstractions.llm import LLMProtocol
 from centrag.abstractions.query_transformer import QueryIntent, QueryTransformerProtocol
 from centrag.abstractions.vectorstore import VectorFilter
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.llm import LLMProtocol
 
 logger = get_logger("implementations.hyde_transformer")
 
 
 class HyDETransformer(QueryTransformerProtocol):
-    """
-    Implements HyDE (Hypothetical Document Embeddings).
-    It generates a 'hypothetical document' (a potential answer) from the query,
-    then uses that answer as the embedding source for vector retrieval.
+    """HyDE (Hypothetical Document Embeddings) Query Transformer.
+
+    The WHY:
+        Semantic search (vector retrieval) often fails because user
+        queries (short, interrogative) look very different from answer
+        chunks (long, declarative). This "Semantic Gap" causes
+        retrieval misses. HyDE solves this by using an LLM to generate
+        a "Fake Answer" (a hypothetical document) first. We then
+        embed this fake answer and use its vector to find real,
+        declarative chunks that look just like it.
+
+    Design Pattern:
+        TRANSFORMER — Implements the `QueryTransformerProtocol`
+        to morph the user's intent into a retrieval-optimized form.
+
+    Usage:
+        transformer = HyDETransformer(llm)
+        intent = await transformer.transform("How do I reset my API key?", "team_1")
+        # intent.optimized_query contains the hypothetical answer paragraph
     """
 
     def __init__(self, llm: LLMProtocol) -> None:

@@ -29,13 +29,21 @@ from centrag.middleware import RequestContext
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
 
-def hash_api_key(raw_key: str, pepper: str) -> str:
+def verify_api_key(raw_key: str, stored_hash: str) -> bool:
     """
-    Hash an API key for storage.
-    Uses SHA256 + pepper (NOT argon2 — we need fast lookup, not slow brute-force resistance).
-    The pepper adds entropy beyond the key itself.
+    Verify an API key against a stored hash.
+    Format: salt_hex:hash_hex
     """
-    return hashlib.sha256(f"{pepper}:{raw_key}".encode()).hexdigest()
+    try:
+        salt_hex, hash_hex = stored_hash.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected_hash = bytes.fromhex(hash_hex)
+        
+        # Use same parameters as creation (100k iterations, SHA256)
+        actual_hash = hashlib.pbkdf2_hmac("sha256", raw_key.encode(), salt, 100_000)
+        return secrets.compare_digest(actual_hash, expected_hash)
+    except (ValueError, TypeError):
+        return False
 
 
 def generate_api_key() -> str:

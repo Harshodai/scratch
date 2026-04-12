@@ -1,31 +1,29 @@
-
-import os
-import uuid
 import asyncio
-import time
-import pickle
 import logging
-import faiss
-from typing import List, Dict, Any, Optional, AsyncGenerator
+import os
+import pickle
+import time
+import uuid
 from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, status, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-
-from langchain_community.vectorstores import FAISS
-from langchain_aws import ChatBedrock, BedrockEmbeddings
-from langchain.docstore.document import Document
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+import faiss
+import redis
+import zstandard as zstd
+from docling.chunking import HybridChunker
 
 # Docling for High-Accuracy Parsing
 from docling.document_converter import DocumentConverter
-from docling.chunking import HybridChunker
-
-import redis
+from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from langchain.docstore.document import Document
+from langchain.prompts import ChatPromptTemplate
+from langchain_aws import BedrockEmbeddings, ChatBedrock
+from langchain_community.vectorstores import FAISS
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from pydantic import BaseModel, Field
 
 # --- Configuration --- #
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -47,20 +45,24 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # --- Pydantic Models --- #
 class ChatRequest(BaseModel):
     session_id: str = Field(..., min_length=1, description="Session ID from upload")
     question: str = Field(..., min_length=1, max_length=2000, description="Question to ask")
 
+
 class ChatResponse(BaseModel):
     answer: str
-    sources: List[Dict[str, Any]]
-    metrics: Dict[str, float]
+    sources: list[dict[str, Any]]
+    metrics: dict[str, float]
+
 
 class UploadResponse(BaseModel):
     session_id: str
     message: str
-    metrics: Dict[str, Any]
+    metrics: dict[str, Any]
+
 
 # --- Redis Client with Connection Pooling --- #
 redis_pool = redis.ConnectionPool(
@@ -70,25 +72,22 @@ redis_pool = redis.ConnectionPool(
     max_connections=20,
     socket_connect_timeout=5,
     socket_timeout=5,
-    health_check_interval=30
+    health_check_interval=30,
 )
 redis_client = redis.Redis(connection_pool=redis_pool)
 
+# --- Memory Cache for Hybrid Retrieval --- #
+from cachetools import LRUCache
+vector_cache = LRUCache(maxsize=100)
+
 # --- AWS Bedrock Clients --- #
-embeddings = BedrockEmbeddings(
-    model_id=BEDROCK_EMBEDDING_MODEL,
-    region_name=AWS_REGION
-)
+embeddings = BedrockEmbeddings(model_id=BEDROCK_EMBEDDING_MODEL, region_name=AWS_REGION)
 
 llm = ChatBedrock(
     model_id=BEDROCK_LLM_MODEL,
     region_name=AWS_REGION,
     streaming=True,
-    model_kwargs={
-        "temperature": 0.1,
-        "max_tokens": 2000,
-        "anthropic_version": "bedrock-2023-05-31"
-    }
+    model_kwargs={"temperature": 0.1, "max_tokens": 2000, "anthropic_version": "bedrock-2023-05-31"},
 )
 
 # --- Docling Components --- #
@@ -96,15 +95,29 @@ doc_converter = DocumentConverter()
 chunker = HybridChunker(
     tokenizer="BAAI/bge-small-en-v1.5",  # Compatible with embeddings
     max_chunk_size=512,
-    merge_peers=True
+    merge_peers=True,
 )
 
+
+def compress_data(data: bytes) -> bytes:
+    """Compress data using Zstandard."""
+    cctx = zstd.ZstdCompressor(level=3)
+    return cctx.compress(data)
+
+
+def decompress_data(data: bytes) -> bytes:
+    """Decompress data using Zstandard."""
+    dctx = zstd.ZstdDecompressor()
+    return dctx.decompress(data)
+
 # --- Helper Functions --- #
+
 
 def validate_file_extension(filename: str) -> bool:
     """Check if file extension is allowed."""
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_EXTENSIONS
+
 
 async def save_upload_file(file: UploadFile) -> str:
     """Save uploaded file to disk asynchronously."""
@@ -113,18 +126,20 @@ async def save_upload_file(file: UploadFile) -> str:
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"
+            detail=f"File size exceeds {MAX_FILE_SIZE // (1024 * 1024)}MB limit",
         )
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _write_file, file_location, content)
     return file_location
+
 
 def _write_file(path: str, content: bytes):
     """Synchronous file write helper."""
     with open(path, "wb") as f:
         f.write(content)
 
-def process_document_with_docling(file_path: str, filename: str) -> List[Document]:
+
+def process_document_with_docling(file_path: str, filename: str) -> list[Document]:
     """Process document using Docling with HybridChunker."""
     try:
         result = doc_converter.convert(file_path)
@@ -138,7 +153,7 @@ def process_document_with_docling(file_path: str, filename: str) -> List[Documen
                 "source": filename,
                 "type": os.path.splitext(filename)[1].lower(),
                 "page": page_no,
-                "chunk_type": chunk.meta.heading_type if hasattr(chunk.meta, 'heading_type') else "text"
+                "chunk_type": chunk.meta.heading_type if hasattr(chunk.meta, "heading_type") else "text",
             }
             documents.append(Document(page_content=chunk.text, metadata=metadata))
         return documents
@@ -146,36 +161,72 @@ def process_document_with_docling(file_path: str, filename: str) -> List[Documen
         logger.error(f"Docling processing error for {filename}: {str(e)}")
         raise
 
+
+async def process_document(file_path: str, filename: str) -> list[Document]:
+    """Async wrapper for document processing."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, process_document_with_docling, file_path, filename)
+
+
+def process_excel_robustly(file_path: str, filename: str) -> list[Document]:
+    """Robust Excel processing — specifically handles multi-sheet files."""
+    try:
+        import pandas as pd
+        excel_data = pd.read_excel(file_path, sheet_name=None)
+        all_docs = []
+        for sheet_name, df in excel_data.items():
+            text = df.to_string(index=False)
+            metadata = {
+                "source": filename,
+                "sheet": sheet_name,
+                "type": "xlsx",
+            }
+            all_docs.append(Document(page_content=text, metadata=metadata))
+        return all_docs
+    except Exception as e:
+        logger.error(f"Excel robustness processing error: {e}")
+        # Fallback to docling
+        return process_document_with_docling(file_path, filename)
+
+
 def serialize_faiss_index(vectorstore: FAISS) -> bytes:
     """Serialize FAISS index to bytes for Redis storage."""
     try:
         serialized_data = {
-            'index': faiss.serialize_index(vectorstore.index),
-            'docstore': vectorstore.docstore,
-            'index_to_docstore_id': vectorstore.index_to_docstore_id
+            "index": faiss.serialize_index(vectorstore.index),
+            "docstore": vectorstore.docstore,
+            "index_to_docstore_id": vectorstore.index_to_docstore_id,
         }
-        return pickle.dumps(serialized_data, protocol=pickle.HIGHEST_PROTOCOL)
+        pickled_data = pickle.dumps(serialized_data, protocol=pickle.HIGHEST_PROTOCOL)
+        return compress_data(pickled_data)
     except Exception as e:
         logger.error(f"FAISS serialization error: {str(e)}")
         raise
 
+
 def deserialize_faiss_index(serialized_data: bytes) -> FAISS:
-    """Deserialize FAISS index from bytes."""
+    """Deserialize FAISS index from bytes (decompress if needed)."""
     try:
-        data = pickle.loads(serialized_data)
-        index = faiss.deserialize_index(data['index'])
+        try:
+            decompressed_data = decompress_data(serialized_data)
+        except:
+            decompressed_data = serialized_data
+            
+        data = pickle.loads(decompressed_data)
+        index = faiss.deserialize_index(data["index"])
         vectorstore = FAISS(
             embedding_function=embeddings.embed_query,
             index=index,
-            docstore=data['docstore'],
-            index_to_docstore_id=data['index_to_docstore_id']
+            docstore=data["docstore"],
+            index_to_docstore_id=data["index_to_docstore_id"],
         )
         return vectorstore
     except Exception as e:
         logger.error(f"FAISS deserialization error: {str(e)}")
         raise
 
-def store_session_data(session_id: str, documents: List[Document], vectorstore: FAISS):
+
+def store_session_data(session_id: str, documents: list[Document], vectorstore: FAISS):
     """Store documents and FAISS index in Redis with TTL."""
     try:
         docs_key = f"session_docs:{session_id}"
@@ -189,7 +240,8 @@ def store_session_data(session_id: str, documents: List[Document], vectorstore: 
         logger.error(f"Redis storage error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Session storage unavailable")
 
-def get_session_vectorstore(session_id: str) -> Optional[FAISS]:
+
+def get_session_vectorstore(session_id: str) -> FAISS | None:
     """Retrieve FAISS index from Redis."""
     try:
         index_key = f"faiss_index:{session_id}"
@@ -200,6 +252,7 @@ def get_session_vectorstore(session_id: str) -> Optional[FAISS]:
     except redis.RedisError as e:
         logger.error(f"Redis retrieval error: {str(e)}")
         return None
+
 
 # --- RAG Chain with Streaming --- #
 
@@ -216,16 +269,19 @@ Helpful Answer:"""
 
 rag_prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
 
-def format_documents_for_context(docs: List[Document]) -> str:
+
+def format_documents_for_context(docs: list[Document]) -> str:
     """Format documents into context string with citations."""
     formatted = []
     for i, doc in enumerate(docs):
         source = doc.metadata.get("source", "unknown")
         page = doc.metadata.get("page", "unknown")
-        formatted.append(f"[Document {i+1}] Source: {source}, Page: {page}\n{doc.page_content}")
+        formatted.append(f"[Document {i + 1}] Source: {source}, Page: {page}\n{doc.page_content}")
     return "\n\n".join(formatted)
 
+
 # --- FastAPI App --- #
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -238,6 +294,7 @@ async def lifespan(app: FastAPI):
             if os.path.isfile(file_path):
                 os.remove(file_path)
 
+
 app = FastAPI(title="RAG Document Q&A API", version="2.0.1", lifespan=lifespan)
 
 app.add_middleware(
@@ -248,33 +305,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.post("/upload_files", response_model=UploadResponse)
-async def upload_files(files: List[UploadFile] = File(...)):
+async def upload_files(files: list[UploadFile] = File(...)):
     session_id = str(uuid.uuid4())
-    uploaded_paths: List[str] = []
-    all_documents: List[Document] = []
+    uploaded_paths: list[str] = []
+    all_documents: list[Document] = []
     start_time = time.time()
-    
+
     try:
         for file in files:
             if not validate_file_extension(file.filename):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File type not allowed: {file.filename}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=f"File type not allowed: {file.filename}"
+                )
             file_path = await save_upload_file(file)
             uploaded_paths.append(file_path)
-            docs = await asyncio.get_event_loop().run_in_executor(None, process_document_with_docling, file_path, file.filename)
+            docs = await asyncio.get_event_loop().run_in_executor(
+                None, process_document_with_docling, file_path, file.filename
+            )
             all_documents.extend(docs)
-        
-        vectorstore = await asyncio.get_event_loop().run_in_executor(None, FAISS.from_documents, all_documents, embeddings)
+
+        vectorstore = await asyncio.get_event_loop().run_in_executor(
+            None, FAISS.from_documents, all_documents, embeddings
+        )
         await asyncio.get_event_loop().run_in_executor(None, store_session_data, session_id, all_documents, vectorstore)
-        
+
         return UploadResponse(
             session_id=session_id,
             message="Files processed successfully.",
-            metrics={"ingestion_time": round(time.time() - start_time, 2), "chunks": len(all_documents)}
+            metrics={"ingestion_time": round(time.time() - start_time, 2), "chunks": len(all_documents)},
         )
     finally:
         for path in uploaded_paths:
-            if os.path.exists(path): os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
+
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
@@ -283,7 +349,7 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=404, detail="Session expired.")
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-    
+
     # Modern LCEL Chain
     chain = (
         {"context": retriever | format_documents_for_context, "question": RunnablePassthrough()}
@@ -301,6 +367,7 @@ async def chat(request: ChatRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
 @app.get("/health")
 async def health_check():
     try:
@@ -309,6 +376,8 @@ async def health_check():
     except:
         return JSONResponse(status_code=503, content={"status": "unhealthy"})
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

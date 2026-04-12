@@ -16,9 +16,11 @@ Security:
   - RLS enabled + forced on all tenant-scoped tables
   - team_isolation policies using session variable app.current_team_id
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers
 revision = "001_initial_schema"
@@ -44,7 +46,9 @@ def upgrade() -> None:
     op.create_table(
         "api_keys",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("key_hash", sa.String(64), unique=True, nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("is_active", sa.Boolean(), server_default=sa.text("true")),
@@ -59,7 +63,9 @@ def upgrade() -> None:
     op.create_table(
         "documents",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("namespace", sa.String(255), nullable=False, server_default="default"),
         sa.Column("filename", sa.String(512), nullable=False),
         sa.Column("s3_key", sa.String(1024), nullable=False),
@@ -79,8 +85,15 @@ def upgrade() -> None:
     op.create_table(
         "chunks",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("document_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("documents.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "document_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("documents.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("token_count", sa.Integer(), nullable=False),
@@ -96,7 +109,9 @@ def upgrade() -> None:
     op.create_table(
         "memory_entries",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "team_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("user_context", sa.String(255)),
         sa.Column("memory_content", sa.Text(), nullable=False),
         sa.Column("memory_type", sa.String(50), nullable=False),

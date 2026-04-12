@@ -10,13 +10,41 @@ Design Pattern: CONFIGURATION PATTERN (Pydantic Settings)
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Self
 
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Central configuration — loaded from .env file or environment."""
+    """The WHY:
+    Allows the system to "Fail Fast" at boot time. By using
+    Pydantic for validation, we ensure that the system never
+    starts if critical environment variables (e.g., PG_PASSWORD or
+    QDRANT_HOST) are missing or type-mismatched.
+
+    FAIL-FAST POLICY: In 'production' environment, critical infrastructure
+    (Postgres, Redis, Qdrant) URLs are strictly forbidden from
+    pointing to 'localhost' or '127.0.0.1'.
+    """
+
+    @model_validator(mode="after")
+    def validate_production_infrastructure(self) -> Self:
+        """Reject local infrastructure in production mode."""
+        if self.env.lower() == "production":
+            critical_urls = {
+                "pg_host": self.pg_host,
+                "redis_url": self.redis_url,
+                "qdrant_host": self.qdrant_host,
+            }
+            for key, value in critical_urls.items():
+                if any(local in value.lower() for local in ["localhost", "127.0.0.1"]):
+                    raise ValueError(
+                        f"CRITICAL CONFIG ERROR: {key}='{value}' is pointing to localhost "
+                        "which is forbidden in PRODUCTION mode. Deploy production infrastructure "
+                        "and update environment variables."
+                    )
+        return self
 
     model_config = SettingsConfigDict(
         env_prefix="CENTRAG_",
@@ -44,6 +72,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def pg_dsn(self) -> str:
+        """Postgres Data Source Name constructed from individual variables."""
         return f"postgresql+asyncpg://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_db}"
 
     # --- Redis ---
@@ -63,6 +92,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def qdrant_url(self) -> str:
+        """Full Qdrant HTTP API endpoint."""
         return f"http://{self.qdrant_host}:{self.qdrant_port}"
 
     # --- AWS ---
@@ -96,8 +126,10 @@ class Settings(BaseSettings):
     enable_pageindex: bool = True  # VECTORLESS path enabled
     enable_vector: bool = True  # VECTOR path (requires Qdrant)
     enable_mcp: bool = True  # Model Context Protocol integration
-    enable_contextual_retrieval: bool = False  # Ingestion-time chunk contextualization
-    enable_contextual_compression: bool = False  # Retrieval-time context refinement
+
+    # Advancements
+    enable_contextual_retrieval: bool = False  # Pre-computation summary (Anthropic 2024)
+    enable_contextual_compression: bool = False  # Retrieval-time LLM refinement
 
     # Provider selection: "noop", "bedrock", "openai"
     embedder_provider: str = "noop"
@@ -115,10 +147,18 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
+        """Convenience helper to check if running in production mode."""
         return self.env == "production"
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Singleton settings — loaded once, cached forever."""
+    """Singleton settings instance.
+
+    The WHY:
+        Prevent reading the environment and re-instantiating the
+        config object multiple times during a single process. This
+        improves performance and ensures consistency across the
+        application.
+    """
     return Settings()

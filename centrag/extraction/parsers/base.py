@@ -12,11 +12,15 @@ SOLID: Open/Closed — add new formats by creating a new parser file
 
 from __future__ import annotations
 
-from centrag.abstractions.extractor import (
-    ContentType,
-    ExtractorProtocol,
-)
+from typing import TYPE_CHECKING
+
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.extractor import (
+        ContentType,
+        ExtractorProtocol,
+    )
 
 logger = get_logger("extraction.parsers")
 
@@ -55,7 +59,7 @@ class ParserRegistry:
         if content_type not in self._parsers:
             raise ValueError(
                 f"No parser registered for content type: {content_type.value}. "
-                f"Available: {[ct.value for ct in self._parsers.keys()]}"
+                f"Available: {[ct.value for ct in self._parsers]}"
             )
         return self._parsers[content_type]
 

@@ -7,20 +7,16 @@ Tests the SQL validation, rate limiting, PII redaction, and audit logging.
 from __future__ import annotations
 
 import pytest
-import json
 
 from mcp_enterprise_server.config import PermissionLevel
 from mcp_enterprise_server.guardrails import (
-    validate_sql_query,
-    validate_schema_access,
-    validate_table_access,
     QueryValidationError,
     TokenBucketRateLimiter,
-    check_rate_limit,
-    RateLimitExceeded,
-    redact_pii,
     cap_result_size,
-    audit_log,
+    redact_pii,
+    validate_schema_access,
+    validate_sql_query,
+    validate_table_access,
 )
 
 

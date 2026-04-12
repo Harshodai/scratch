@@ -8,9 +8,10 @@ SOLID: Liskov Substitution — standard protocol for LLM-based extractors, regex
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from centrag.abstractions.vectorstore import VectorFilter
+if TYPE_CHECKING:
+    from centrag.abstractions.vectorstore import VectorFilter
 
 
 @dataclass(frozen=True)

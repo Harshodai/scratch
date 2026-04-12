@@ -1,22 +1,32 @@
-"""
-Retrieval route — the main RAG endpoint.
+"""Retrieval API — The Front Door for Grounded AI Intelligence.
 
-Agentic Pattern: TOOL USE
-    - This endpoint IS the "tool" that AI agents call
-    - Via MCP or direct API, agents send queries here and get grounded answers
-    - The response includes sources for citation (NotebookLM-style)
+The WHY:
+    This is the primary way users and AI Agents interact with the
+    CentRAG platform. It transforms a natural language question
+    into a grounded, citation-backed answer. By exposing a
+    single robust `/retrieve` endpoint, we hide the complexity
+    of multi-provider routing, vector filtering, and two-pass
+    reasoning from the client.
 
-Now WIRED to the real RetrievalEngine built in app.py lifespan.
+Agentic Pattern:
+    TOOL USE — This endpoint is designed to be called as a
+    "External Tool" by frontier AI models. The inclusion of
+    structured sources allows the model to fact-check its own
+    output using CentRAG as the source of truth.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from centrag.middleware import RequestContext
 from centrag.middleware.auth import resolve_api_key
 from centrag.retrieval.engine import RetrievalEngine, RetrievalRequest
+
+if TYPE_CHECKING:
+    from centrag.middleware import RequestContext
 
 router = APIRouter(tags=["retrieval"])
 

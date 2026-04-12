@@ -18,9 +18,25 @@ from centrag.abstractions.embedder import SparseEmbedderProtocol
 
 
 class BM25SparseEmbedder(SparseEmbedderProtocol):
-    """
-    Lightweight sparse embedder generating (token_hash -> term_frequency) vectors.
-    Designed for native Qdrant BM25 sparse vector ingest.
+    """Keyword-optimization engine for sparse vector generation.
+
+    The WHY:
+        Dense embeddings (like Titan or OpenAI) are great at "meaning"
+        but poor at "exactness". If a user searches for a specific
+        serial number or proprietary term (e.g., "XF-9000"), a dense
+        model might miss it. This sparse embedder acts as a
+        "Keyword Safety Net", preserving the exact lexical tokens
+        so that Hybrid Search can retrieve the precise document
+        even when the semantic meaning is ambiguous.
+
+    Design Pattern:
+        TOKENIZER — Extracts and counts non-stop-word frequencies to
+        build term-frequency (TF) maps that Qdrant uses for BM25.
+
+    Usage:
+        sparse_embedder = BM25SparseEmbedder()
+        # Returns a map of {token_hash: frequency}
+        vector = await sparse_embedder.embed_sparse("Reboot the XF-9000")
     """
 
     _STOP_WORDS_CACHE: dict[str, set[str]] = {}

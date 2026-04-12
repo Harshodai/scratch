@@ -4,10 +4,14 @@ Database session management.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
-from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from fastapi import Request
 
 
 async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:

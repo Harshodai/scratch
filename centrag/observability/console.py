@@ -11,15 +11,17 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from centrag.observability import (
     SpanContext,
     SpanKind,
 )
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = get_logger("observability.console")
 

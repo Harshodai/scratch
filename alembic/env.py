@@ -1,10 +1,11 @@
 """Alembic environment configuration for async PostgreSQL."""
+
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from alembic import context
 from centrag.config import get_settings
 from centrag.models import Base
 

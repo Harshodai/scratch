@@ -101,7 +101,7 @@ class TestHeaderFooterStripping:
         text = "Some content here.\n42\nMore content."
         result = cleaner.clean(text)
         # Standalone "42" stripped (looks like a page number)
-        lines = [l.strip() for l in result.cleaned_text.split("\n") if l.strip()]
+        lines = [line.strip() for line in result.cleaned_text.split("\n") if line.strip()]
         assert "42" not in lines
 
     def test_page_x_pattern_removed(self):

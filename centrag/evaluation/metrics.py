@@ -13,10 +13,12 @@ Design Pattern: COLLECTOR — accumulates results, then reports.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from centrag.evaluation.dataset import Difficulty, TestCase
-from centrag.evaluation.judges import JudgeResult
+
+if TYPE_CHECKING:
+    from centrag.evaluation.judges import JudgeResult
 
 
 @dataclass

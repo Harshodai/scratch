@@ -37,107 +37,106 @@ async def example_stdio_client():
         },
     )
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
+        await session.initialize()
 
-            # -- List available tools --
-            tools = await session.list_tools()
-            print("Available Tools:")
-            for tool in tools.tools:
-                print(f"  📦 {tool.name}: {tool.description[:80]}...")
+        # -- List available tools --
+        tools = await session.list_tools()
+        print("Available Tools:")
+        for tool in tools.tools:
+            print(f"  📦 {tool.name}: {tool.description[:80]}...")
 
-            # -- List available resources --
-            resources = await session.list_resources()
-            print("\nAvailable Resources:")
-            for resource in resources.resources:
-                print(f"  📄 {resource.uri}")
+        # -- List available resources --
+        resources = await session.list_resources()
+        print("\nAvailable Resources:")
+        for resource in resources.resources:
+            print(f"  📄 {resource.uri}")
 
-            # ---------------------------------------------------------------
-            # Example: Query GOS DB
-            # ---------------------------------------------------------------
-            print("\n" + "=" * 60)
-            print("Example: Query GOS DB")
-            print("=" * 60)
+        # ---------------------------------------------------------------
+        # Example: Query GOS DB
+        # ---------------------------------------------------------------
+        print("\n" + "=" * 60)
+        print("Example: Query GOS DB")
+        print("=" * 60)
 
-            result = await session.call_tool(
-                "tool_query_gosdb",
-                arguments={
-                    "query": "SELECT * FROM APP_DATA.transactions WHERE amount > :min_amount",
-                    "schema": "APP_DATA",
-                    "max_rows": 10,
-                    # Note: params would need to be JSON string in practice
-                },
-            )
-            print(f"GOS DB Result: {result.content[0].text[:500]}")
+        result = await session.call_tool(
+            "tool_query_gosdb",
+            arguments={
+                "query": "SELECT * FROM APP_DATA.transactions WHERE amount > :min_amount",
+                "schema": "APP_DATA",
+                "max_rows": 10,
+                # Note: params would need to be JSON string in practice
+            },
+        )
+        print(f"GOS DB Result: {result.content[0].text[:500]}")
 
-            # ---------------------------------------------------------------
-            # Example: List DynamoDB Tables
-            # ---------------------------------------------------------------
-            print("\n" + "=" * 60)
-            print("Example: List DynamoDB Tables")
-            print("=" * 60)
+        # ---------------------------------------------------------------
+        # Example: List DynamoDB Tables
+        # ---------------------------------------------------------------
+        print("\n" + "=" * 60)
+        print("Example: List DynamoDB Tables")
+        print("=" * 60)
 
-            result = await session.call_tool("tool_list_dynamodb_tables", arguments={})
-            print(f"DynamoDB Tables: {result.content[0].text[:500]}")
+        result = await session.call_tool("tool_list_dynamodb_tables", arguments={})
+        print(f"DynamoDB Tables: {result.content[0].text[:500]}")
 
-            # ---------------------------------------------------------------
-            # Example: Query DynamoDB
-            # ---------------------------------------------------------------
-            print("\n" + "=" * 60)
-            print("Example: Query DynamoDB Table")
-            print("=" * 60)
+        # ---------------------------------------------------------------
+        # Example: Query DynamoDB
+        # ---------------------------------------------------------------
+        print("\n" + "=" * 60)
+        print("Example: Query DynamoDB Table")
+        print("=" * 60)
 
-            result = await session.call_tool(
-                "tool_query_dynamodb",
-                arguments={
-                    "table_name": "user-sessions",
-                    "key_condition": "user_id = :uid",
-                    "expression_values": json.dumps({":uid": "user_12345"}),
-                    "max_items": 5,
-                },
-            )
-            print(f"DynamoDB Query: {result.content[0].text[:500]}")
+        result = await session.call_tool(
+            "tool_query_dynamodb",
+            arguments={
+                "table_name": "user-sessions",
+                "key_condition": "user_id = :uid",
+                "expression_values": json.dumps({":uid": "user_12345"}),
+                "max_items": 5,
+            },
+        )
+        print(f"DynamoDB Query: {result.content[0].text[:500]}")
 
-            # ---------------------------------------------------------------
-            # Example: Execute Athena Query
-            # ---------------------------------------------------------------
-            print("\n" + "=" * 60)
-            print("Example: Execute Athena Query")
-            print("=" * 60)
+        # ---------------------------------------------------------------
+        # Example: Execute Athena Query
+        # ---------------------------------------------------------------
+        print("\n" + "=" * 60)
+        print("Example: Execute Athena Query")
+        print("=" * 60)
 
-            result = await session.call_tool(
-                "tool_execute_athena_query",
-                arguments={
-                    "query": "SELECT * FROM logs.api_access_logs LIMIT 10",
-                    "database": "logs",
-                    "max_rows": 10,
-                },
-            )
-            print(f"Athena Result: {result.content[0].text[:500]}")
+        result = await session.call_tool(
+            "tool_execute_athena_query",
+            arguments={
+                "query": "SELECT * FROM logs.api_access_logs LIMIT 10",
+                "database": "logs",
+                "max_rows": 10,
+            },
+        )
+        print(f"Athena Result: {result.content[0].text[:500]}")
 
-            # ---------------------------------------------------------------
-            # Example: Describe DynamoDB Table
-            # ---------------------------------------------------------------
-            print("\n" + "=" * 60)
-            print("Example: Describe DynamoDB Table")
-            print("=" * 60)
+        # ---------------------------------------------------------------
+        # Example: Describe DynamoDB Table
+        # ---------------------------------------------------------------
+        print("\n" + "=" * 60)
+        print("Example: Describe DynamoDB Table")
+        print("=" * 60)
 
-            result = await session.call_tool(
-                "tool_describe_dynamodb_table",
-                arguments={"table_name": "user-sessions"},
-            )
-            print(f"Table Description: {result.content[0].text[:500]}")
+        result = await session.call_tool(
+            "tool_describe_dynamodb_table",
+            arguments={"table_name": "user-sessions"},
+        )
+        print(f"Table Description: {result.content[0].text[:500]}")
 
-            # ---------------------------------------------------------------
-            # Example: List Athena Databases
-            # ---------------------------------------------------------------
-            print("\n" + "=" * 60)
-            print("Example: List Athena Databases")
-            print("=" * 60)
+        # ---------------------------------------------------------------
+        # Example: List Athena Databases
+        # ---------------------------------------------------------------
+        print("\n" + "=" * 60)
+        print("Example: List Athena Databases")
+        print("=" * 60)
 
-            result = await session.call_tool("tool_list_athena_databases", arguments={})
-            print(f"Athena Databases: {result.content[0].text[:500]}")
+        result = await session.call_tool("tool_list_athena_databases", arguments={})
+        print(f"Athena Databases: {result.content[0].text[:500]}")
 
 
 # ===========================================================================

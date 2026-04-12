@@ -33,14 +33,16 @@ from __future__ import annotations
 import os
 import tempfile
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from centrag.abstractions.extractor import ContentType
-from centrag.abstractions.tree_index import TreeIndexProtocol
-from centrag.extraction.pipeline import ExtractionPipeline
 from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
-from centrag.storage.document_store import DocumentStore
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.tree_index import TreeIndexProtocol
+    from centrag.extraction.pipeline import ExtractionPipeline
+    from centrag.storage.document_store import DocumentStore
 
 logger = get_logger("ingestion.service")
 

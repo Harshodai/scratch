@@ -1,10 +1,17 @@
 from aws_cdk import (
     Stack,
+)
+from aws_cdk import (
     aws_ec2 as ec2,
+)
+from aws_cdk import (
     aws_ecs as ecs,
+)
+from aws_cdk import (
     aws_ecs_patterns as ecs_patterns,
 )
 from constructs import Construct
+
 
 class CentragStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -19,14 +26,14 @@ class CentragStack(Stack):
         # 3. Application Load Balanced Fargate Service
         # (References the newly scaffolded Dockerfile in root)
         self.fastapi_service = ecs_patterns.ApplicationLoadBalancedFargateService(
-            self, "CentragApiService",
+            self,
+            "CentragApiService",
             cluster=cluster,
             cpu=512,
             memory_limit_mib=1024,
             desired_count=3,
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                image=ecs.ContainerImage.from_asset(".."),
-                container_port=8000
+                image=ecs.ContainerImage.from_asset(".."), container_port=8000
             ),
-            public_load_balancer=True
+            public_load_balancer=True,
         )

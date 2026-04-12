@@ -84,23 +84,25 @@ def _parse_pages(pages: str) -> list[int]:
 
 
 class PageIndexTreeBuilder:
-    """
-    Builds hierarchical tree indices using VectifyAI/PageIndex.
+    """Hierarchical Document Architect using PageIndex.
 
-    VECTORLESS PATH ONLY.
+    The WHY:
+        Standard RAG "chunks" documents into arbitrary pieces, often
+        breaking sentences or losing context. This "Unreasonable
+        Chunking" destroys document structure. The TreeBuilder
+        solves this by organizing a document into a logical hierarchy
+        (Chapters → Sections → Pages). This allows our AI Agents
+        to "browse" the document structure before diving into specific
+        text, much like a human uses a Table of Contents.
 
-    Supports:
-        - PDF: native PageIndex processing (page_index function)
-        - Markdown: md_to_tree() function
-        - Other formats: converted to Markdown first, then md_to_tree()
+    Design Pattern:
+        ADAPTER — Wraps the VectifyAI/PageIndex library to implement
+        our `TreeIndexProtocol`, enabling "Vectorless RAG" flows.
 
     Usage:
         builder = PageIndexTreeBuilder(model="gpt-4o")
-        result = await builder.build_tree("/path/to/report.pdf", "application/pdf")
-        # result.tree → hierarchical tree JSON
-        # result.page_cache → [{page: 1, content: "..."}, ...]
-
-    Implements TreeIndexProtocol.
+        # Generates a JSON-navigable map of the document
+        result = await builder.build_tree("sec-filing.pdf", "application/pdf")
     """
 
     # Content types that PageIndex handles natively

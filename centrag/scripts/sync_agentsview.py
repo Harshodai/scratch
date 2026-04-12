@@ -1,15 +1,22 @@
+"""AgentsView Synchronization Script — The Observability Bridge.
+
+The WHY:
+    Agentic systems can be difficult to monitor in real-time. This
+    script bridges the gap between the hidden "Brain" (Antigravity's
+    internal state) and the "Dashboard" (AgentsView). It transforms
+    raw agent logs into a structured, visual timeline, allowing
+    developers to audit agent reasoning, tool usage, and retrieval
+    precision without digging through shell output.
+"""
+
 import glob
 import json
 import os
 from datetime import datetime
 
-# Antigravity App Data Path
-ANTIGRAVITY_APP_DATA = os.path.expanduser("~/.gemini/antigravity")
-BRAIN_DIR = os.path.join(ANTIGRAVITY_APP_DATA, "brain")
-
-# AgentsView Search Path for Gemini-like sessions.
-# This matches what internal/parser/discovery.go expects.
-AGENTSVIEW_GEMINI_TMP = os.path.expanduser("~/.gemini/tmp/antigravity/chats")
+# Antigravity paths (specific to user environment)
+BRAIN_DIR = r"C:\Users\khars\.gemini\antigravity\brain"
+AGENTSVIEW_GEMINI_TMP = r"C:\Users\khars\PycharmProjects\scratch\.gemini\agentsview_tmp"
 
 
 def parse_antigravity_session(session_path):

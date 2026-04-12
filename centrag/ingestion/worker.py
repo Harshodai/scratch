@@ -26,19 +26,22 @@ SOLID: Dependency Inversion — depends on IngestionService (abstraction),
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-from centrag.ingestion.service import IngestionResult, IngestionService
-from centrag.storage.document_store import DocumentStore
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.ingestion.service import IngestionResult, IngestionService
+    from centrag.storage.document_store import DocumentStore
 
 logger = get_logger("ingestion.worker")
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     """Lifecycle states for an ingestion job."""
 
     PENDING = "pending"
@@ -153,10 +156,8 @@ class IngestionWorker:
             except TimeoutError:
                 logger.warning("worker_shutdown_timeout", timeout=self._config.shutdown_timeout_seconds)
                 self._task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._task
-                except asyncio.CancelledError:
-                    pass
 
         # Report any remaining jobs
         pending = [j for j in self._jobs.values() if j.status == JobStatus.PENDING]
@@ -319,15 +320,13 @@ class IngestionWorker:
                     job.error_message = f"Failed after {job.max_retries} retries: {error_msg}"
 
                     # Update document store
-                    try:
+                    with contextlib.suppress(Exception):
                         await self._store.update_meta(
                             team_id=job.team_id,
                             doc_id=job.job_id,
                             status="failed",
                             error_message=job.error_message,
                         )
-                    except Exception:
-                        pass
 
                     logger.error(
                         "job_failed_permanently",

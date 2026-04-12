@@ -35,26 +35,27 @@ Design Decisions:
 
 from __future__ import annotations
 
-import json
-import time
 import asyncio
+import json
 import posixpath
-from typing import Any
+import time
+from typing import TYPE_CHECKING, Any
 
-import boto3
 import structlog
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-
-from mcp_enterprise_server.config import S3Config, PermissionLevel
 from mcp_enterprise_server.aws_credentials import AWSCredentialManager
 from mcp_enterprise_server.guardrails import (
+    audit_log,
+    cap_result_size,
     check_rate_limit,
     redact_pii,
-    cap_result_size,
-    audit_log,
 )
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import Context, FastMCP
+    from mcp.server.session import ServerSession
+
+    from mcp_enterprise_server.config import S3Config
 
 logger = structlog.get_logger("s3_mcp")
 
@@ -77,10 +78,32 @@ _TEXT_CONTENT_TYPES = {
 }
 
 _TEXT_EXTENSIONS = {
-    ".json", ".csv", ".txt", ".md", ".xml", ".yaml", ".yml",
-    ".html", ".htm", ".log", ".tsv", ".sql", ".py", ".js",
-    ".ts", ".java", ".go", ".rs", ".toml", ".ini", ".cfg",
-    ".env", ".sh", ".bat", ".ps1", ".dockerfile",
+    ".json",
+    ".csv",
+    ".txt",
+    ".md",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".html",
+    ".htm",
+    ".log",
+    ".tsv",
+    ".sql",
+    ".py",
+    ".js",
+    ".ts",
+    ".java",
+    ".go",
+    ".rs",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".env",
+    ".sh",
+    ".bat",
+    ".ps1",
+    ".dockerfile",
 }
 
 
@@ -115,10 +138,7 @@ class S3Client:
     def _validate_bucket(self, bucket: str) -> None:
         """Validate bucket is in the whitelist."""
         if self._config.allowed_buckets and bucket not in self._config.allowed_buckets:
-            raise PermissionError(
-                f"Bucket '{bucket}' is not in the allowed list: "
-                f"{self._config.allowed_buckets}"
-            )
+            raise PermissionError(f"Bucket '{bucket}' is not in the allowed list: {self._config.allowed_buckets}")
 
     def _validate_prefix(self, key: str) -> None:
         """Validate key prefix is in the whitelist (if configured)."""
@@ -127,22 +147,18 @@ class S3Client:
         for prefix in self._config.allowed_prefixes:
             if key.startswith(prefix):
                 return
-        raise PermissionError(
-            f"Key '{key}' does not match any allowed prefix: "
-            f"{self._config.allowed_prefixes}"
-        )
+        raise PermissionError(f"Key '{key}' does not match any allowed prefix: {self._config.allowed_prefixes}")
 
     def _validate_extension(self, key: str) -> None:
         """Block download of dangerous file types."""
         ext = posixpath.splitext(key)[1].lower()
         if ext in self._config.blocked_extensions:
-            raise PermissionError(
-                f"File extension '{ext}' is blocked for security reasons."
-            )
+            raise PermissionError(f"File extension '{ext}' is blocked for security reasons.")
 
     # -- List Buckets --
     async def list_buckets(self) -> list[dict[str, Any]]:
         """List S3 buckets, filtered by whitelist if configured."""
+
         def _list():
             client = self._get_client()
             response = client.list_buckets()
@@ -153,11 +169,12 @@ class S3Client:
                 name = b["Name"]
                 if self._config.allowed_buckets and name not in self._config.allowed_buckets:
                     continue
-                result.append({
-                    "name": name,
-                    "creation_date": b.get("CreationDate", "").isoformat()
-                    if b.get("CreationDate") else "",
-                })
+                result.append(
+                    {
+                        "name": name,
+                        "creation_date": b.get("CreationDate", "").isoformat() if b.get("CreationDate") else "",
+                    }
+                )
             return sorted(result, key=lambda x: x["name"])
 
         return await asyncio.to_thread(_list)
@@ -186,13 +203,14 @@ class S3Client:
             response = client.list_objects_v2(**params)
             objects = []
             for obj in response.get("Contents", []):
-                objects.append({
-                    "key": obj["Key"],
-                    "size_bytes": obj["Size"],
-                    "last_modified": obj["LastModified"].isoformat()
-                    if obj.get("LastModified") else "",
-                    "storage_class": obj.get("StorageClass", "STANDARD"),
-                })
+                objects.append(
+                    {
+                        "key": obj["Key"],
+                        "size_bytes": obj["Size"],
+                        "last_modified": obj["LastModified"].isoformat() if obj.get("LastModified") else "",
+                        "storage_class": obj.get("StorageClass", "STANDARD"),
+                    }
+                )
 
             return {
                 "objects": objects,
@@ -235,8 +253,7 @@ class S3Client:
                 "bucket": bucket,
                 "size_bytes": size,
                 "content_type": content_type,
-                "last_modified": head["LastModified"].isoformat()
-                if head.get("LastModified") else "",
+                "last_modified": head["LastModified"].isoformat() if head.get("LastModified") else "",
                 "etag": head.get("ETag", "").strip('"'),
                 "metadata": head.get("Metadata", {}),
             }
@@ -246,8 +263,7 @@ class S3Client:
                 return {
                     **metadata,
                     "content": None,
-                    "note": "Binary file — only metadata returned. "
-                            "Use get_s3_metadata for binary file info.",
+                    "note": "Binary file — only metadata returned. Use get_s3_metadata for binary file info.",
                 }
 
             # Size guard
@@ -255,8 +271,7 @@ class S3Client:
                 return {
                     **metadata,
                     "content": None,
-                    "note": f"Object too large ({size:,} bytes). "
-                            f"Max allowed: {effective_max:,} bytes.",
+                    "note": f"Object too large ({size:,} bytes). Max allowed: {effective_max:,} bytes.",
                 }
 
             # Download text content
@@ -288,8 +303,7 @@ class S3Client:
                 "bucket": bucket,
                 "size_bytes": head.get("ContentLength", 0),
                 "content_type": head.get("ContentType", "unknown"),
-                "last_modified": head["LastModified"].isoformat()
-                if head.get("LastModified") else "",
+                "last_modified": head["LastModified"].isoformat() if head.get("LastModified") else "",
                 "etag": head.get("ETag", "").strip('"'),
                 "storage_class": head.get("StorageClass", "STANDARD"),
                 "metadata": head.get("Metadata", {}),
@@ -325,12 +339,13 @@ class S3Client:
                     key = obj["Key"]
                     if suffix and not key.endswith(suffix):
                         continue
-                    results.append({
-                        "key": key,
-                        "size_bytes": obj["Size"],
-                        "last_modified": obj["LastModified"].isoformat()
-                        if obj.get("LastModified") else "",
-                    })
+                    results.append(
+                        {
+                            "key": key,
+                            "size_bytes": obj["Size"],
+                            "last_modified": obj["LastModified"].isoformat() if obj.get("LastModified") else "",
+                        }
+                    )
                     if len(results) >= effective_max:
                         return results
             return results
@@ -386,17 +401,24 @@ async def list_s3_objects(
 
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "list_s3_objects", caller_id,
+            "list_s3_objects",
+            caller_id,
             {"bucket": bucket, "prefix": prefix},
-            f"{result_data['count']} objects", True, duration,
+            f"{result_data['count']} objects",
+            True,
+            duration,
         )
         return result
     except Exception as e:
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "list_s3_objects", caller_id,
+            "list_s3_objects",
+            caller_id,
             {"bucket": bucket, "prefix": prefix},
-            "", False, duration, error=str(e),
+            "",
+            False,
+            duration,
+            error=str(e),
         )
         raise
 
@@ -420,17 +442,24 @@ async def get_s3_object(
 
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "get_s3_object", caller_id,
+            "get_s3_object",
+            caller_id,
             {"bucket": bucket, "key": key},
-            f"size={result_data.get('size_bytes', 0)}", True, duration,
+            f"size={result_data.get('size_bytes', 0)}",
+            True,
+            duration,
         )
         return result
     except Exception as e:
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "get_s3_object", caller_id,
+            "get_s3_object",
+            caller_id,
             {"bucket": bucket, "key": key},
-            "", False, duration, error=str(e),
+            "",
+            False,
+            duration,
+            error=str(e),
         )
         raise
 
@@ -452,17 +481,24 @@ async def get_s3_metadata(
 
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "get_s3_metadata", caller_id,
+            "get_s3_metadata",
+            caller_id,
             {"bucket": bucket, "key": key},
-            "metadata returned", True, duration,
+            "metadata returned",
+            True,
+            duration,
         )
         return result
     except Exception as e:
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "get_s3_metadata", caller_id,
+            "get_s3_metadata",
+            caller_id,
             {"bucket": bucket, "key": key},
-            "", False, duration, error=str(e),
+            "",
+            False,
+            duration,
+            error=str(e),
         )
         raise
 
@@ -495,17 +531,24 @@ async def search_s3_objects(
 
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "search_s3_objects", caller_id,
+            "search_s3_objects",
+            caller_id,
             {"bucket": bucket, "prefix": prefix, "suffix": suffix},
-            f"{len(results)} matches", True, duration,
+            f"{len(results)} matches",
+            True,
+            duration,
         )
         return result
     except Exception as e:
         duration = (time.monotonic() - start) * 1000
         audit_log(
-            "search_s3_objects", caller_id,
+            "search_s3_objects",
+            caller_id,
             {"bucket": bucket, "prefix": prefix, "suffix": suffix},
-            "", False, duration, error=str(e),
+            "",
+            False,
+            duration,
+            error=str(e),
         )
         raise
 
@@ -559,8 +602,11 @@ def register_s3_tools(mcp_server: FastMCP, config: S3Config) -> None:
         """List objects in an S3 bucket."""
         caller = ctx.client_id or "unknown" if ctx else "unknown"
         return await list_s3_objects(
-            bucket=bucket, prefix=prefix, max_results=max_results,
-            s3_client=s3_client, caller_id=caller,
+            bucket=bucket,
+            prefix=prefix,
+            max_results=max_results,
+            s3_client=s3_client,
+            caller_id=caller,
         )
 
     @mcp_server.tool(
@@ -568,7 +614,7 @@ def register_s3_tools(mcp_server: FastMCP, config: S3Config) -> None:
         description=(
             "Read the content of a text-based file from S3 (JSON, CSV, TXT, "
             "MD, XML, YAML, etc.). Binary files return metadata only. "
-            f"Max file size: {config.max_object_size_bytes // (1024*1024)} MB. "
+            f"Max file size: {config.max_object_size_bytes // (1024 * 1024)} MB. "
             "Blocked extensions: " + ", ".join(config.blocked_extensions)
         ),
     )
@@ -580,8 +626,10 @@ def register_s3_tools(mcp_server: FastMCP, config: S3Config) -> None:
         """Get object content (text) or metadata (binary)."""
         caller = ctx.client_id or "unknown" if ctx else "unknown"
         return await get_s3_object(
-            bucket=bucket, key=key,
-            s3_client=s3_client, caller_id=caller,
+            bucket=bucket,
+            key=key,
+            s3_client=s3_client,
+            caller_id=caller,
         )
 
     @mcp_server.tool(
@@ -600,8 +648,10 @@ def register_s3_tools(mcp_server: FastMCP, config: S3Config) -> None:
         """Get object metadata."""
         caller = ctx.client_id or "unknown" if ctx else "unknown"
         return await get_s3_metadata(
-            bucket=bucket, key=key,
-            s3_client=s3_client, caller_id=caller,
+            bucket=bucket,
+            key=key,
+            s3_client=s3_client,
+            caller_id=caller,
         )
 
     @mcp_server.tool(
@@ -622,9 +672,12 @@ def register_s3_tools(mcp_server: FastMCP, config: S3Config) -> None:
         """Search S3 objects by prefix/suffix."""
         caller = ctx.client_id or "unknown" if ctx else "unknown"
         return await search_s3_objects(
-            bucket=bucket, prefix=prefix, suffix=suffix,
+            bucket=bucket,
+            prefix=prefix,
+            suffix=suffix,
             max_results=max_results,
-            s3_client=s3_client, caller_id=caller,
+            s3_client=s3_client,
+            caller_id=caller,
         )
 
     logger.info("s3_tools_registered", tool_count=5)

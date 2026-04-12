@@ -17,25 +17,35 @@ SOLID:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy, ChunkResult
-from centrag.abstractions.extractor import ContentType, ExtractedDocument
-from centrag.abstractions.llm import LLMProtocol
 from centrag.extraction.chunkers.fixed import FixedChunker
 from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.chunkers.recursive import RecursiveChunker
-from centrag.extraction.parsers.base import ParserRegistry
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from centrag.abstractions.extractor import ContentType, ExtractedDocument
+    from centrag.abstractions.llm import LLMProtocol
+    from centrag.extraction.parsers.base import ParserRegistry
 
 logger = get_logger("extraction.pipeline")
 
 
 @dataclass(frozen=True)
 class ExtractionResult:
-    """Immutable result of the full extraction pipeline."""
+    """Immutable result of the document processing pipeline.
+
+    The WHY:
+        Provides a standardized bundle of metadata, raw text, and
+        structured chunks. By being immutable, it ensures that
+        downstream consumers (VectorStores, Audit Logs) operate
+        on consistent data.
+    """
 
     document: ExtractedDocument
     chunks: list[ChunkResult]
@@ -43,39 +53,31 @@ class ExtractionResult:
 
     @property
     def chunk_count(self) -> int:
+        """Returns the total number of segments extracted."""
         return len(self.chunks)
 
     @property
     def total_tokens(self) -> int:
+        """Returns the cumulative token count across all chunks."""
         return sum(c.token_count for c in self.chunks)
 
 
 class ExtractionPipeline:
-    """
-    Orchestrates document extraction and chunking.
+    """Orchestrator for the document ingestion lifecycle.
 
-    Usage:
-        # 1. Create pipeline with registered parsers
-        registry = ParserRegistry()
-        registry.register(PDFParser())
-        registry.register(PlainTextParser())
+    The WHY:
+        Raw files are useless for RAG. This pipeline transforms
+        binary blobs into searchable "knowledge units". It coordinates:
+        1. Parsing: Converting PDF/DOCX/HTML into text.
+        2. Contextualization: Adding document-level context to each chunk.
+        3. Chunking: Splitting text into optimized segments.
+        4. Enrichment: Adding section headers and metadata.
 
-        pipeline = ExtractionPipeline(
-            parser_registry=registry,
-            default_chunking=ChunkingConfig(strategy=ChunkingStrategy.RECURSIVE),
-        )
-
-        # 2. Process a document
-        result = await pipeline.process(
-            file_bytes=pdf_bytes,
-            content_type=ContentType.PDF,
-            filename="report.pdf",
-        )
-
-        # 3. Use results
-        for chunk in result.chunks:
-            embedding = await embedder.embed_query(chunk.content)
-            await vectorstore.upsert(...)
+    Design Patterns:
+        - FACADE: Simplifies the complex Parse → Chunk flow.
+        - STRATEGY: Selects the right parser/chunker based on file type.
+        - CHAIN OF THOUGHT: Optionally uses an LLM to "situatue" chunks
+          within the overall document (Anthropic 2024 pattern).
     """
 
     def __init__(

@@ -12,18 +12,27 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from centrag.abstractions.cache import CacheProtocol
-from centrag.abstractions.llm import LLMProtocol, LLMResponse
-from centrag.abstractions.retrieval import SourceChunk
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.cache import CacheProtocol
+    from centrag.abstractions.llm import LLMProtocol, LLMResponse
+    from centrag.abstractions.retrieval import SourceChunk
 
 logger = get_logger("retrieval.generator")
 
 
 class GeneratorProtocol(Protocol):
-    """Protocol for LLM generation strategies."""
+    """Protocol for LLM generation strategies.
+
+    The WHY:
+        Defines the interface for how CentRAG synthesizes final
+        answers. By decoupling the implementation, we can switch
+        between a "Standard" single-pass generator and a "Two-Pass"
+        reasoning generator based on query complexity.
+    """
 
     async def generate_response(
         self,
@@ -34,12 +43,19 @@ class GeneratorProtocol(Protocol):
 
 
 class TwoPassGenerator:
-    """
-    Implements the 2-step reasoning process from technical documentation.
+    """Grounding-first hierarchical reasoning pipeline.
 
-    PATTERNS:
-    - CHAIN OF THOUGHT (implicit in the multi-pass structure)
-    - SELF-REFLECTION (second pass critiques/merges facts)
+    The WHY:
+        Complex RAG queries (comparisons, summaries) often fail because
+        the LLM tries to reason and retrieve simultaneously, leading
+        to hallucinations. This generator enforces a Two-Pass pattern:
+        1. Pass 1 (Grounding): Extract atomic facts + quotes from each chunk.
+        2. Pass 2 (Synthesis): Merge those facts into a final answer.
+        This "Thought-before-Action" pattern significantly increases precision.
+
+    Design Patterns:
+        - TWO-PASS REASONING: Atomic extraction → Final synthesis.
+        - PARALLEL EXECUTION: Fact extraction happens concurrently across chunks.
     """
 
     def __init__(self, llm: LLMProtocol, cache: CacheProtocol | None = None) -> None:

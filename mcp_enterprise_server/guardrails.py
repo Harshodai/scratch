@@ -16,11 +16,11 @@ in the tool implementations or layered as middleware.
 
 from __future__ import annotations
 
+import functools
 import re
 import time
-import functools
 from collections import defaultdict
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -36,17 +36,18 @@ logger = structlog.get_logger("guardrails")
 # 1. SQL Injection / Dangerous-Keyword Guard
 # ---------------------------------------------------------------------------
 _DANGEROUS_PATTERNS: list[re.Pattern] = [
-    re.compile(r"--"),                              # SQL line comment
-    re.compile(r"/\*"),                              # SQL block comment start
-    re.compile(r";\s*\w"),                           # chained statements
-    re.compile(r"'\s*OR\s+'", re.IGNORECASE),        # classic tautology
-    re.compile(r"UNION\s+SELECT", re.IGNORECASE),    # union injection
-    re.compile(r"xp_\w+", re.IGNORECASE),            # MSSQL extended stored procs
+    re.compile(r"--"),  # SQL line comment
+    re.compile(r"/\*"),  # SQL block comment start
+    re.compile(r";\s*\w"),  # chained statements
+    re.compile(r"'\s*OR\s+'", re.IGNORECASE),  # classic tautology
+    re.compile(r"UNION\s+SELECT", re.IGNORECASE),  # union injection
+    re.compile(r"xp_\w+", re.IGNORECASE),  # MSSQL extended stored procs
 ]
 
 
 class QueryValidationError(Exception):
     """Raised when a query violates guardrail policies."""
+
     pass
 
 
@@ -82,17 +83,12 @@ def validate_sql_query(
     if permission_level == PermissionLevel.READ_ONLY:
         first_keyword = upper_query.lstrip("( ").split()[0] if upper_query.strip() else ""
         if first_keyword not in ("SELECT", "WITH", "EXPLAIN", "DESCRIBE", "SHOW"):
-            raise QueryValidationError(
-                f"Read-only mode only allows SELECT/WITH/EXPLAIN queries. "
-                f"Got: {first_keyword}"
-            )
+            raise QueryValidationError(f"Read-only mode only allows SELECT/WITH/EXPLAIN queries. Got: {first_keyword}")
 
     # Regex-based injection detection
     for pattern in _DANGEROUS_PATTERNS:
         if pattern.search(query):
-            raise QueryValidationError(
-                f"Potentially dangerous SQL pattern detected: {pattern.pattern}"
-            )
+            raise QueryValidationError(f"Potentially dangerous SQL pattern detected: {pattern.pattern}")
 
     return query.strip()
 
@@ -100,17 +96,13 @@ def validate_sql_query(
 def validate_schema_access(schema: str, allowed_schemas: list[str]) -> None:
     """Ensure the target schema is in the whitelist."""
     if allowed_schemas and schema.upper() not in [s.upper() for s in allowed_schemas]:
-        raise QueryValidationError(
-            f"Schema '{schema}' is not in the allowed list: {allowed_schemas}"
-        )
+        raise QueryValidationError(f"Schema '{schema}' is not in the allowed list: {allowed_schemas}")
 
 
 def validate_table_access(table: str, allowed_tables: list[str]) -> None:
     """Ensure the target DynamoDB table is in the whitelist."""
     if allowed_tables and table not in allowed_tables:
-        raise QueryValidationError(
-            f"Table '{table}' is not in the allowed list: {allowed_tables}"
-        )
+        raise QueryValidationError(f"Table '{table}' is not in the allowed list: {allowed_tables}")
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +139,7 @@ class TokenBucketRateLimiter:
 
 class RateLimitExceeded(Exception):
     """Raised when a caller exceeds their rate limit."""
+
     pass
 
 
@@ -188,21 +181,20 @@ def check_rate_limit(caller_id: str, tool_name: str) -> None:
     """
     if not _global_limiter.allow(f"global:{caller_id}"):
         raise RateLimitExceeded(
-            f"Global rate limit exceeded for caller '{caller_id}'. "
-            "Please wait before making more requests."
+            f"Global rate limit exceeded for caller '{caller_id}'. Please wait before making more requests."
         )
     if not _tool_limiters[tool_name].allow(f"tool:{tool_name}:{caller_id}"):
-        raise RateLimitExceeded(
-            f"Per-tool rate limit exceeded for tool '{tool_name}' by caller '{caller_id}'."
-        )
+        raise RateLimitExceeded(f"Per-tool rate limit exceeded for tool '{tool_name}' by caller '{caller_id}'.")
 
 
 # ---------------------------------------------------------------------------
 # 3. PII Redaction — SINGLE SOURCE from centrag.guardrails.pii
 # ---------------------------------------------------------------------------
 # Previously duplicated here. Now imports from shared source to prevent drift.
-from centrag.guardrails.pii import PII_PATTERNS as _PII_PATTERNS  # noqa: E402
 from centrag.guardrails.pii import redact_pii  # noqa: E402, F811
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +246,7 @@ def audit_log(
 def _sanitize_params(params: dict[str, Any]) -> dict[str, Any]:
     """Remove sensitive parameter values from audit logs."""
     sensitive_keys = {"password", "secret", "token", "credential", "api_key"}
-    return {
-        k: "[REDACTED]" if k.lower() in sensitive_keys else v
-        for k, v in params.items()
-    }
+    return {k: "[REDACTED]" if k.lower() in sensitive_keys else v for k, v in params.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +270,7 @@ def guardrailed(
         def my_tool_impl(query: str) -> str:
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs) -> Any:
@@ -317,6 +307,7 @@ def guardrailed(
                 raise
 
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         return sync_wrapper

@@ -1,20 +1,37 @@
-"""
-Feedback route — capture user feedback for active learning.
+"""Feedback API — The Closed-Loop Evaluation System.
+
+The WHY:
+    RAG systems are never static. This module captures the "Ground
+    Truth" directly from users. By correlating specific queries
+    and answers with explicit scores (+1/-1), we build a "Golden
+    Dataset" that allows us to fine-tune rerankers and measure the
+    precision of new retrieval strategies (like HyDE or Hybrid
+    Search) over time.
+
+Active Learning:
+    The data collected here feeds directly into the `evaluation/`
+    harness, allowing us to perform regression testing on the
+    quality of the AI's reasoning.
 """
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from centrag.database import get_db
-from centrag.middleware import RequestContext
 from centrag.middleware.auth import resolve_api_key
 from centrag.models import Document, Feedback
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from centrag.middleware import RequestContext
 
 router = APIRouter(tags=["feedback"])
 

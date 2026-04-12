@@ -32,11 +32,12 @@ Usage:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy
 from centrag.cache.l1_memory import L1InMemoryCache
 from centrag.cache.l2_redis import L2RedisCache
 from centrag.cache.orchestrator import TieredCacheOrchestrator
-from centrag.config import Settings
 from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.parsers.base import ParserRegistry
 from centrag.extraction.pipeline import ExtractionPipeline
@@ -70,6 +71,9 @@ from centrag.retrieval.query_router import QueryRouter
 # --- Shared infrastructure ---
 from centrag.storage.document_store import DocumentStore
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.config import Settings
 
 logger = get_logger("wiring")
 
@@ -387,6 +391,7 @@ def build_ingestion_service(
         parsers=registry.supported_types(),
         pageindex_model=settings.pageindex_model,
         pii_redaction=True,
+        llm=llm_name,
     )
 
     return service

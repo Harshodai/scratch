@@ -20,7 +20,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from centrag.utils.logger import get_logger
@@ -28,7 +28,7 @@ from centrag.utils.logger import get_logger
 logger = get_logger("retrieval.session")
 
 
-class MessageRole(str, Enum):
+class MessageRole(StrEnum):
     """Message roles in a conversation."""
 
     USER = "user"

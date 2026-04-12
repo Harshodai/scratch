@@ -108,3 +108,93 @@ CentRAG is built for multi-tenant enterprise environments.
 - **Tiered Caching**: L1 (In-memory) → L2 (Redis) ensure sub-100ms response times for repeat queries.
 - **LLM Gateway**: Implements **Circuit Breakers** and **Budget Gating** to prevent runaway cloud costs and cascade failures during provider outages.
 - **AgentsView Integration**: Real-time export of session metadata to the AgentsView dashboard for deep-trace analysis of agent reasoning.
+
+---
+
+## 7. API Contracts (REST)
+
+### A. Retrieval: `POST /v1/retrieve`
+The primary entry point for grounded intelligence.
+
+**Request Body:**
+```json
+{
+  "query": "string (1-5000 chars)",
+  "namespace": "string (default: 'default')",
+  "max_results": "integer (1-20, default: 5)",
+  "include_memory": "boolean (default: true)",
+  "include_sources": "boolean (default: true)",
+  "mode": "auto | pageindex | vector | hybrid | rag",
+  "target_doc_id": "string (optional UUID)"
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "string",
+  "sources": [
+    {
+      "content": "string (capped at 1000 chars)",
+      "document_id": "uuid",
+      "chunk_index": "integer",
+      "relevance_score": "float",
+      "source_type": "pageindex | vector",
+      "reasoning": "string (LLM navigation trace)"
+    }
+  ],
+  "query_complexity": "simple | moderate | complex",
+  "cache_tier": "hit | miss | none"
+}
+```
+
+### B. Ingestion: `POST /v1/documents`
+Supports multi-path ingestion (Vector + PageIndex).
+
+**Request:** `multipart/form-data` with `file`, `namespace`, and `async_mode`.
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "filename": "string",
+  "status": "pending | processing | ready | failed",
+  "tree_available": "boolean",
+  "vectors_available": "boolean",
+  "chunk_count": "integer"
+}
+```
+
+---
+
+## 8. Hybrid Retrieval (RRF Fusion)
+CentRAG uses **Reciprocal Rank Fusion (RRF)** to merge results from the Semantic (Vector) and Reasoning (PageIndex) paths.
+
+- **Logic**: For each document $d$, the score is calculated as:
+  $RRFscore(d) = \sum_{r \in R} \frac{1}{k + rank(r, d)}$
+  where $k = 60$ (default constant) and $rank(r, d)$ is the rank of document $d$ in retrieval path $r$.
+- **Why**: RRF is parameter-free and robust. It prioritizes documents that appear consistently at the top across different retrieval methodologies (Dense Vector vs. Keyword/Hierarchical), outperforming raw score averaging.
+
+---
+
+## 9. Specialized Agent Ecosystem (Quality Gates)
+To ensure production hardening, CentRAG implements a suite of custom agent skills in `.gemini/skills/`:
+
+| Skill | Role |
+|-------|------|
+| `centrag-orchestrator` | Coordinates all gates and provides production readiness scores. |
+| `centrag-sdlc-validator` | Enforces the 6-step post-change ritual and TDD. |
+| `centrag-architect-review` | Validates SOLID adherence and multi-tenant isolation. |
+| `centrag-security-rail` | Detects PII gaps and ensures "localhost" blocking in prod. |
+| `centrag-ai-engineer` | Benchmarks retrieval precision and prompt fidelity. |
+
+---
+
+## 10. Final Gap Assessment (Verified 2026-04-12)
+| Feature | Status | Implementation Reference |
+|---------|--------|--------------------------|
+| Multi-Tenant Isolation | ✅ 100% | `QdrantVectorStore.search` payload filtering |
+| Deep Immutability | ✅ 100% | `ExtractedDocument.__post_init__` |
+| Contextual Retrieval | ✅ 100% | `ExtractionPipeline.process` situational Pass |
+| Hybrid RRF Fusion | ✅ 100% | `HybridRetriever.fuse` |
+| Agentic Quality Gates | ✅ 100% | `.gemini/skills/` custom skill suite |

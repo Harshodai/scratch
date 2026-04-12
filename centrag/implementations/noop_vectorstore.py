@@ -35,7 +35,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity between two vectors."""
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(x * x for x in b) ** 0.5
     if norm_a == 0 or norm_b == 0:
@@ -61,11 +61,25 @@ def _matches_filter(payload: dict[str, Any], vf: VectorFilter) -> bool:
 
 
 class NoOpVectorStore:
-    """
-    In-memory vector store with brute-force search.
+    """Zero-Infrastructure "Sandbox" Vector Store.
 
-    Implements VectorStoreProtocol. All data is lost on restart.
-    Good for: development, testing, small demos.
+    The WHY:
+        Setting up a production vector database (like Qdrant or
+        Pinecone) can be a hurdle for new developers or CI/CD
+        environments. The NoOpVectorStore provides a "Sandbox"
+        that implements the full `VectorStoreProtocol` in-memory.
+        It supports filtering, searching (via brute-force cosine
+        similarity), and batching, allowing the system to run
+        completely detached from any external infrastructure.
+
+    Design Pattern:
+        IN-MEMORY REPOSITORY — All data is stored in a Python
+        dictionary and is volatile (lost on restart).
+
+    Usage:
+        store = NoOpVectorStore()
+        # Full protocol support without the 6333 port requirement
+        await store.upsert("docs", "id1", [0.1, 0.2], {"team_id": "t1"})
     """
 
     def __init__(self) -> None:
@@ -91,7 +105,7 @@ class NoOpVectorStore:
         payloads: list[dict[str, Any]],
     ) -> None:
         """Batch upsert."""
-        for vid, vec, pay in zip(ids, vectors, payloads):
+        for vid, vec, pay in zip(ids, vectors, payloads, strict=True):
             await self.upsert(collection, vid, vec, pay)
         logger.debug("noop_upsert_batch", collection=collection, count=len(ids))
 

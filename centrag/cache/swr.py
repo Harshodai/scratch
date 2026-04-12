@@ -15,13 +15,15 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from cachetools import LRUCache
 
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
 
 logger = get_logger(__name__)
 

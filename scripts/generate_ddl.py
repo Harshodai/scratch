@@ -4,6 +4,7 @@ DDL Generator — Exports SQLAlchemy models and RLS policies to raw SQL.
 Usage:
     python scripts/generate_ddl.py > sql/schema.sql
 """
+
 from __future__ import annotations
 
 import os
@@ -12,16 +13,14 @@ import sys
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from sqlalchemy.schema import CreateTable
 from sqlalchemy import create_mock_engine
+from sqlalchemy.schema import CreateTable
 
-from centrag.models import Base, RLS_SETUP_SQL
+from centrag.models import RLS_SETUP_SQL, Base
 
 
 def generate():
-    from sqlalchemy.schema import CreateTable
-    from sqlalchemy import create_mock_engine
-    
+
     def dump(sql, *multiparams, **params):
         print(sql.compile(dialect=engine.dialect))
         print(";")
@@ -32,7 +31,7 @@ def generate():
     print("-- Generated automatically from centrag.models --")
     print("\n-- 1. EXTENSIONS --")
     print('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
-    
+
     print("\n-- 2. TABLES --")
     for table in Base.metadata.sorted_tables:
         print(f"\n-- Table: {table.name}")

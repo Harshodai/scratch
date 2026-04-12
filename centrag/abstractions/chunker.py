@@ -20,12 +20,20 @@ IMPORTANT: Late Chunking is NOT a chunking strategy — it's an EMBEDDING strate
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 
-class ChunkingStrategy(str, Enum):
-    """Available chunking strategies."""
+class ChunkingStrategy(StrEnum):
+    """Available chunking strategies in the CentRAG pipeline.
+
+    The WHY:
+        One size does NOT fit all in RAG. Fixed-size chunking is safe
+        but often breaks sentences. Semantic chunking is precise
+        but slow. Structure-aware chunking is ideal for manuals
+        with headers. This enum allows selecting the right "Lens"
+        for each document type.
+    """
 
     FIXED = "fixed"  # Fixed-size with overlap (baseline)
     RECURSIVE = "recursive"  # Recursive text splitting (LangChain-style)
@@ -36,11 +44,19 @@ class ChunkingStrategy(str, Enum):
 
 @dataclass(frozen=True)
 class ChunkingConfig:
-    """
-    Configuration for chunking behavior.
+    """Configuration for document segmentation behavior.
 
-    Policy-as-code: these settings control chunk size, overlap,
-    and strategy selection per document or globally.
+    The WHY:
+        RAG performance is highly sensitive to "Chunk Size" and
+        "Overlap." Too small, and the LLM lacks context; too large,
+        and irrelevant noise dilutes the retrieved signal. This config
+        acts as the "Control Panel" for retrieval precision.
+
+    Attributes:
+        strategy: The logic used to detect split points.
+        chunk_size: Target token count for each segment.
+        chunk_overlap: Shared tokens between adjacent chunks (prevents edge-cutting).
+        enable_contextual_retrieval: 2024 Anthropic pattern to prepend summaries.
     """
 
     strategy: ChunkingStrategy = ChunkingStrategy.RECURSIVE
@@ -59,16 +75,20 @@ class ChunkingConfig:
 
 @dataclass(frozen=True)
 class ChunkResult:
-    """
-    Immutable chunk with FULL PROVENANCE for downstream embedding + retrieval.
+    """Immutable chunk with FULL PROVENANCE for downstream indexing.
 
-    Each chunk carries complete citation metadata. Without this,
-    retrieval citations are unreliable and Knowledge Graph anchors
-    have no reference points.
+    The WHY:
+        Reliable citation is the #1 requirement for enterprise RAG.
+        Without capturing the `page_number`, `section_title`, and
+        `char_offset` during chunking, the system cannot generate
+        trustworthy links back to the source document.
 
-    Required by spec:
-        {chunk_id, doc_id, source_type, section_title, page_number,
-         char_offset, token_count, s3_url}
+    Attributes:
+        content: The text segment designated for retrieval.
+        chunk_index: Chronological position in the parent document.
+        start_char: Absolute character offset (used for highlighting).
+        token_count: Computed or estimated token length for LLM budget.
+        doc_id: UUID of the source document for relational linking.
     """
 
     # Core content
@@ -94,16 +114,21 @@ class ChunkResult:
 
     @property
     def char_offset(self) -> int:
-        """Alias for start_char — matches spec field name."""
+        """Alias for start_char — matches specification naming conventions."""
         return self.start_char
 
     @property
     def boundary(self) -> tuple[int, int]:
-        """Character boundary for late chunking integration with EmbedderProtocol."""
+        """Character boundary for late chunking integration.
+
+        Usage:
+            >>> boundaries = [c.boundary for c in doc_chunks]
+            >>> await embedder.embed_with_late_chunking(full_text, boundaries)
+        """
         return (self.start_char, self.end_char)
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize for JSON storage / cache."""
+        """Serialize for JSON storage, cache, or API transport."""
         return {
             "chunk_id": self.chunk_id,
             "chunk_index": self.chunk_index,
@@ -122,11 +147,22 @@ class ChunkResult:
 
 @runtime_checkable
 class ChunkerProtocol(Protocol):
-    """Contract for all chunking implementations."""
+    """Contract for text segmentation implementations.
+
+    The WHY:
+        Separates text splitting from the ingestion pipeline.
+        Implementations can range from simple character splitters to
+        advanced LLM-based proposition splitters, all using the
+        same interface.
+
+    Design Goal:
+        Provide high-precision boundaries for BOTH standard
+        retrieval and context-aware Late Chunking.
+    """
 
     @property
     def strategy(self) -> ChunkingStrategy:
-        """Which strategy this chunker implements."""
+        """Which strategy this specific chunker provides."""
         ...
 
     def chunk(
@@ -136,20 +172,16 @@ class ChunkerProtocol(Protocol):
         document_title: str = "",
         section_headers: list[str] | None = None,
     ) -> list[ChunkResult]:
-        """
-        Split text into chunks according to the strategy.
+        """Split document text into contextually-rich chunks.
 
         Args:
-            text:             Full document text to chunk.
-            config:           Override default config for this call.
-            document_title:   Prepended to each chunk if config.prepend_title.
-            section_headers:  Section headers for context enrichment.
+            text: Raw document text extracted by an Extractor.
+            config: Parameter overrides for this specific document.
+            document_title: Global title for context enrichment.
+            section_headers: List of parent headings for hierarchy awareness.
 
         Returns:
-            Ordered list of ChunkResult, each with content and metadata.
-
-        Design: This is a synchronous operation — chunking is CPU-bound,
-                not I/O-bound. No async needed.
+            list[ChunkResult]: A list of metadata-rich chunks ready for embedding.
         """
         ...
 
@@ -158,13 +190,14 @@ class ChunkerProtocol(Protocol):
         text: str,
         config: ChunkingConfig | None = None,
     ) -> list[tuple[int, int]]:
-        """
-        Return chunk boundaries WITHOUT extracting text.
+        """Identify splitting points WITHOUT performing text extraction.
 
-        Used by EmbedderProtocol.embed_with_late_chunking() to know
-        where to pool token embeddings.
+        The WHY:
+            Crucial for Late Chunking. To preserve full-document context,
+            the embedder needs the boundaries first to pool tokens correctly
+            across the entire model attention window.
 
         Returns:
-            List of (start_char, end_char) tuples.
+            list[tuple[int, int]]: A list of (start_char, end_char) boundaries.
         """
         ...

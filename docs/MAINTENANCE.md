@@ -80,25 +80,32 @@ pytest tests/ -v
 
 Every change must maintain the current pass rate (202+ tests). If you add a new component, add corresponding tests.
 
-### 7. Repository Hygiene (Optional but Recommended)
+### 7. Python Docstrings
+We use the **Google Style** for all Python docstrings. To ensure consistency:
+1.  Install the **autoDocstring - Python Docstring Generator** extension in VS Code.
+2.  The repository is pre-configured via `.vscode/settings.json` to use Google style with type hinting and return-value summaries.
+3.  Always generate docstrings for all public classes and methods.
 
-To keep the repository clean of temporary Python artifacts and tool caches:
+### 8. Repository Hygiene (MANDATORY)
+
+To keep the repository clean of temporary Python artifacts and tool caches, run the following command as part of every ritual:
 
 ```powershell
-Get-ChildItem -Path . -Include __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, *.pyc, *.pyo, *.pyd -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path . -Include __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, *.pyc, *.pyo, *.pyd, .agents, .gemini -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ---
 
-## Quick Reference: The 8-Step Post-Change Ritual
+## Quick Reference: The 9-Step Post-Change Ritual
 
 ```
 1. ✅ Code change complete
 2. 🔄 python centrag/scripts/sync_agentsview.py (Export sessions to AgentsView)
 3. 🔄 python -m code_review_graph build --repo .
-4. 🧹 Clean repository caches (See Step 7)
-5. 📄 Update docs/CODE_FLOW.md (class names, file paths, flow diagrams)
-6. 📄 Update AGENTS.md (condensed patterns table)
-7. 📄 Update README.md (features table, doc index, test count)
-8. 🧪 pytest tests/ -v (must pass)
+4. 🧹 Clean repository caches (See Step 8)
+5. 📝 Generate/Update Google-style docstrings (Use autoDocstring)
+6. 📄 Update docs/CODE_FLOW.md (class names, file paths, flow diagrams)
+7. 📄 Update AGENTS.md (condensed patterns table)
+8. 📄 Update README.md (features table, doc index, test count)
+9. 🧪 pytest tests/ -v (must pass)
 ```

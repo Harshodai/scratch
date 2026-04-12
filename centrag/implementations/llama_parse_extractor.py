@@ -22,10 +22,26 @@ logger = get_logger("implementations.llamaparse")
 
 
 class LlamaParseExtractor:
-    """
-    Integrates LlamaIndex LlamaParse for high-quality extraction.
+    """Enterprise Document Parser powered by Llama Cloud.
 
-    REQUIRES: LLAMA_CLOUD_API_KEY environment variable.
+    The WHY:
+        Standard PDF parsers (like PyMuPDF) extract text but often
+        fail to preserve structural relationships. They "break"
+        complex tables, lose nested lists, and ignore diagrams.
+        LlamaParse uses computer vision and LLM-based reasoning
+        to parse documents into clean Markdown, ensuring that
+        spatial relationships (like table headers) are preserved
+        as semantic ones.
+
+    Design Pattern:
+        ADAPTER — Translates the Llama Cloud API and its specific
+        `Document` objects into our platform's standard
+        `ExtractedDocument` schema.
+
+    Usage:
+        extractor = LlamaParseExtractor(api_key="llx-...")
+        # Best for: Complex Financial Reports, Tax Forms, Tech Specs
+        doc = await extractor.extract(pdf_bytes, ContentType.PDF)
     """
 
     def __init__(self, api_key: str | None = None) -> None:

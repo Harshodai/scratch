@@ -30,14 +30,17 @@ SOLID: Single Responsibility — only does tree-based retrieval.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from centrag.abstractions.tree_index import TreeIndexProtocol
-from centrag.storage.document_store import DocumentStore
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.tree_index import TreeIndexProtocol
+    from centrag.storage.document_store import DocumentStore
 
 logger = get_logger("retrieval.pageindex")
 
@@ -63,19 +66,18 @@ PAGES: <comma-separated page ranges, e.g. "5-7, 22-28, 45">
 CONFIDENCE: <float 0.0-1.0 indicating how confident you are the answer is in these pages>
 """
 
-ANSWER_GENERATION_PROMPT = """You are a document QA assistant. Answer the user's question based ONLY on the provided document content.
-
-DOCUMENT CONTENT (from pages {page_refs}):
-{page_content}
-
-USER QUESTION: {query}
-
-INSTRUCTIONS:
-- Answer based ONLY on the provided content. Do not make up information.
-- Cite specific page numbers when referencing information.
-- If the content does not contain the answer, say so explicitly.
-- Be concise but thorough.
-"""
+ANSWER_GENERATION_PROMPT = (
+    "You are a document QA assistant. Answer the user's question "
+    "based ONLY on the provided document content.\n\n"
+    "DOCUMENT CONTENT (from pages {page_refs}):\n"
+    "{page_content}\n\n"
+    "USER QUESTION: {query}\n\n"
+    "INSTRUCTIONS:\n"
+    "- Answer based ONLY on the provided content. Do not make up information.\n"
+    "- Cite specific page numbers when referencing information.\n"
+    "- If the content does not contain the answer, say so explicitly.\n"
+    "- Be concise but thorough.\n"
+)
 
 
 @dataclass(frozen=True)
@@ -300,10 +302,8 @@ class PageIndexRetriever:
             re.IGNORECASE,
         )
         if conf_match:
-            try:
+            with contextlib.suppress(ValueError):
                 result["confidence"] = min(1.0, max(0.0, float(conf_match.group(1))))
-            except ValueError:
-                pass
 
         return result
 

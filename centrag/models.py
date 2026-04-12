@@ -16,7 +16,6 @@ Security: ROW-LEVEL SECURITY (RLS)
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
@@ -31,6 +30,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
+from centrag.utils.time import utcnow
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -39,7 +40,10 @@ class Base(AsyncAttrs, DeclarativeBase):
     pass
 
 
-from centrag.utils.time import utcnow
+pass
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # =============================================================================
 # TEAM & AUTH
@@ -47,6 +51,20 @@ from centrag.utils.time import utcnow
 
 
 class Team(Base):
+    """The root entity for multi-tenant isolation.
+
+    The WHY:
+        CentRAG is an enterprise-grade platform where data isolation
+        is the #1 requirement. Every resource (Documents, Chunks,
+        Memories) must be anchored to a Team. This model manages
+        the billing tier and global configuration tokens for the tenant.
+
+    Attributes:
+        id: Unique UUID used for Row-Level Security (RLS).
+        name: Human-readable identifier for the organization.
+        tier: Determines rate limits and access to advanced RAG patterns.
+    """
+
     __tablename__ = "teams"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -63,6 +81,14 @@ class Team(Base):
 
 
 class ApiKey(Base):
+    """Secure access token for programmatic platform interaction.
+
+    The WHY:
+        Decouples user authentication from system-to-system integration.
+        Each key is hashed (never stored in plain text) and scoped
+        directly to a Team for secure API access.
+    """
+
     __tablename__ = "api_keys"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -91,6 +117,21 @@ class ApiKey(Base):
 
 
 class Document(Base):
+    """Storage-aware representative of a processed source file.
+
+    The WHY:
+        Tracks the lifecycle of an ingested file from 'Pending' through
+        'Ready'. By persisting MIME types and S3 keys, we can handle
+        incremental updates and automatic re-processing when
+        chunking strategies change.
+
+    Lifecycle Status:
+        - pending: File uploaded but not yet parsed.
+        - processing: Extraction or chunking in progress.
+        - ready: Indexed and available for retrieval.
+        - failed: Terminal error during ingestion (see error_message).
+    """
+
     __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -122,6 +163,15 @@ class Document(Base):
 
 
 class Chunk(Base):
+    """A searchable segment of a document.
+
+    The WHY:
+        Standardizes the connection between relational metadata
+        (Postgres) and high-performance vector retrieval (Qdrant).
+        The `vector_id` is the glue that allows CentRAG to perform
+        Hybrid Search while maintaining strict team filters.
+    """
+
     __tablename__ = "chunks"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -154,9 +204,18 @@ class Chunk(Base):
 
 
 class MemoryEntry(Base):
-    """
-    Temporal memory with versioning (Zep/Graphiti-inspired).
-    Facts are NEVER overwritten — old facts get valid_to set.
+    """Temporal context memory (Zep/Graphiti-inspired).
+
+    The WHY:
+        Implements persistent agentic memory. New facts never
+        overwrite the old; instead, we use `valid_from` and `valid_to`
+        to create a temporal graph. This allows the RAG system to
+        recall past state while avoiding contradiction by filtering
+        for only 'currently active' facts.
+
+    Attributes:
+        superseded_by: Points to the new version of this fact.
+        relevance_score: Used for similarity retrieval prioritization.
     """
 
     __tablename__ = "memory_entries"

@@ -32,8 +32,8 @@ dependencies = [
     # --- AI / Embeddings ---
     "cohere>=5.11.0",               # Re-ranking (VECTOR path)
     "tiktoken>=0.8.0",              # Token counting (shared)
-    "llama-parse>=0.5.0",           # High-fidelity hierarchical extraction
-    "openai>=1.50.0",               # Direct LLM access (optional)
+    "llama-cloud-services>=0.1.0",           # High-fidelity hierarchical extraction
+    "openai>=1.50.0,<2.0.0",               # Direct LLM access (optional)
 
     # --- VECTORLESS path: PageIndex ---
     "litellm>=1.50.0",              # LLM gateway for tree building
@@ -61,7 +61,14 @@ dependencies = [
     # --- Infrastructure / CDK ---
     "aws-cdk-lib>=2.150.0",
     "constructs>=10.3.0",
+
+    # --- Data Processing & FAISS ---
+    "faiss-cpu>=1.9.0",
+    "docling>=2.0.0",
+    "zstandard>=0.22.0",
 ]
+
+
 
 [project.optional-dependencies]
 dev = [
@@ -91,6 +98,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
+ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -13,6 +13,7 @@ Design: LEAF in Strategy Pattern. Implements ExtractorProtocol.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 from centrag.abstractions.extractor import (
@@ -57,74 +58,88 @@ class PDFParser(ExtractorProtocol):
         import fitz  # PyMuPDF
 
         try:
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            total_pages = doc.page_count
+            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+                total_pages = doc.page_count
 
-            extracted_elements: list[ExtractedElement] = []
-            full_text_parts: list[str] = []
-            tables_count = 0
+                # Pass 1: Collect candidates for boilerplate (top/bottom text that might repeat)
+                candidate_boilerplate: Counter[str] = Counter()
+                for page in doc:
+                    page_rect = page.rect
+                    blocks = page.get_text("blocks")
+                    for b in blocks:
+                        y_pos = b[1]
+                        text = b[4].strip()
+                        if not text:
+                            continue
+                        # Candidates are text in top 8% or bottom 8%
+                        if y_pos < page_rect.height * 0.08 or y_pos > page_rect.height * 0.92:
+                            candidate_boilerplate[text] += 1
 
-            logger.info("pdf_extraction_start", filename=filename, pages=total_pages)
+                extracted_elements: list[ExtractedElement] = []
+                full_text_parts: list[str] = []
+                tables_count = 0
 
-            for page_idx, page in enumerate(doc, 1):
-                # 1. Extract blocks (x0, y0, x1, y1, text, block_no, block_type)
-                blocks = page.get_text("blocks")
+                logger.info("pdf_extraction_start", filename=filename, pages=total_pages)
 
-                # Sort blocks primarily by vertical position (Y), then horizontal (X)
-                # to handle multi-column layouts robustly.
-                blocks.sort(key=lambda b: (b[1], b[0]))
+                for page_idx, page in enumerate(doc, 1):
+                    # 1. Extract blocks (x0, y0, x1, y1, text, block_no, block_type)
+                    blocks = page.get_text("blocks")
 
-                for b in blocks:
-                    block_text = b[4].strip()
-                    if not block_text:
-                        continue
+                    # Sort blocks primarily by vertical position (Y), then horizontal (X)
+                    # to handle multi-column layouts robustly.
+                    blocks.sort(key=lambda b: (b[1], b[0]))
 
-                    # 2. Heuristic Cleaning
-                    cleaned_text = self._clean_text(block_text)
-                    if not cleaned_text:
-                        continue
+                    for b in blocks:
+                        block_text = b[4].strip()
+                        if not block_text:
+                            continue
 
-                    # 3. Boilerplate Filtering (Heuristic)
-                    if self._is_boilerplate(cleaned_text, b, page.rect):
-                        continue
+                        # 2. Heuristic Cleaning
+                        cleaned_text = self._clean_text(block_text)
+                        if not cleaned_text:
+                            continue
 
-                    # 4. Element Classification (PoC logic)
-                    el_type = self._classify_element(cleaned_text, b)
-                    if el_type == "table":
-                        tables_count += 1
+                        # 3. Boilerplate Filtering (Heuristic + Cross-page Repetition)
+                        if self._is_boilerplate(cleaned_text, b, page.rect, candidate_boilerplate):
+                            continue
 
-                    element = ExtractedElement(
-                        content=cleaned_text,
-                        element_type=el_type,
-                        metadata={"page_number": page_idx, "coordinates": b[:4], "block_no": b[5]},
-                    )
-                    extracted_elements.append(element)
-                    full_text_parts.append(cleaned_text)
+                        # 4. Element Classification (PoC logic)
+                        el_type = self._classify_element(cleaned_text, b)
+                        if el_type == "table":
+                            tables_count += 1
 
-            full_text = "\n\n".join(full_text_parts)
+                        element = ExtractedElement(
+                            content=cleaned_text,
+                            element_type=el_type,
+                            metadata={"page_number": page_idx, "coordinates": b[:4], "block_no": b[5]},
+                        )
+                        extracted_elements.append(element)
+                        full_text_parts.append(cleaned_text)
 
-            # Determine Title (best guess: first header)
-            title = filename
-            for el in extracted_elements:
-                if el.element_type == "header":
-                    title = el.content
-                    break
+                full_text = "\n\n".join(full_text_parts)
 
-            logger.info(
-                "pdf_extraction_complete", filename=filename, chars=len(full_text), elements=len(extracted_elements)
-            )
+                # Determine Title (best guess: first header)
+                title = filename
+                for el in extracted_elements:
+                    if el.element_type == "header":
+                        title = el.content
+                        break
 
-            return ExtractedDocument(
-                text=full_text,
-                elements=extracted_elements,
-                title=title,
-                content_type=ContentType.PDF,
-                page_count=total_pages,
-                table_count=tables_count,
-                image_count=0,  # PyMuPDF integration can be extended for images later
-                char_count=len(full_text),
-                metadata={"filename": filename, "engine": "PyMuPDF", "layout_aware": True},
-            )
+                logger.info(
+                    "pdf_extraction_complete", filename=filename, chars=len(full_text), elements=len(extracted_elements)
+                )
+
+                return ExtractedDocument(
+                    text=full_text,
+                    elements=extracted_elements,
+                    title=title,
+                    content_type=ContentType.PDF,
+                    page_count=total_pages,
+                    table_count=tables_count,
+                    image_count=0,  # PyMuPDF integration can be extended for images later
+                    char_count=len(full_text),
+                    metadata={"filename": filename, "engine": "PyMuPDF", "layout_aware": True},
+                )
 
         except Exception as e:
             logger.error("pdf_extraction_failed", filename=filename, error=str(e))
@@ -144,22 +159,27 @@ class PDFParser(ExtractorProtocol):
 
         return text.strip()
 
-    def _is_boilerplate(self, text: str, block: tuple, page_rect: Any) -> bool:
-        """Detect headers/footers based on position and patterns."""
+    def _is_boilerplate(self, text: str, block: tuple, page_rect: Any, counts: Counter[str]) -> bool:
+        """Detect headers/footers based on position, patterns, and cross-page repetition."""
         y_pos = block[1]
         page_height = page_rect.height
 
-        # Header area (top 8%)
-        if y_pos < page_height * 0.08:
-            if len(text) < 50:
-                return True  # Likely page title/chapter
+        # Explicit boilerplate patterns
+        boilerplate_regex = [
+            r"^\d+$",  # Just digits
+            r"^Page \d+$",  # Page number
+            r"^Page \d+ of \d+$",
+            r"CONFIDENTIAL",
+            r"DO NOT DISCLOSE",
+            r"INTERNAL USE ONLY",
+        ]
+        if any(re.search(p, text, re.IGNORECASE) for p in boilerplate_regex):
+            return True
 
-        # Footer area (bottom 8%)
-        if y_pos > page_height * 0.92:
-            if re.match(r"^\d+$|^Page \d+$", text):
-                return True  # Page number
-            if len(text) < 40:
-                return True  # Likely copyright/footer
+        # Repetition check for top/bottom area
+        is_at_extremity = y_pos < page_height * 0.08 or y_pos > page_height * 0.92
+        if is_at_extremity and counts.get(text, 0) > 1:
+            return True
 
         return False
 

@@ -29,21 +29,26 @@ logger = get_logger("implementations.qdrant")
 
 
 class QdrantVectorStore:
-    """
-    Production VectorStoreProtocol backed by Qdrant.
+    """Production VectorStore implementation backed by Qdrant.
 
-    VECTOR PATH ONLY.
+    The WHY:
+        Vectors alone are just coordinates. In an enterprise system,
+        we need a store that supports Hybrid Search (Dense + Sparse)
+        and strict Multi-Tenant filtering. Qdrant allows us to
+        store the text alongside the vector (Payload-Based Retrieval),
+        ensuring that every search is payload-filtered by `team_id`
+        before the similarity calculation is even performed.
 
-    Features:
-        - Auto-creates collections with HNSW + cosine distance
-        - Team-isolated via VectorFilter (payload filtering)
-        - Batch upsert for ingestion throughput
-        - Configurable score threshold for quality gating
+    Design Patterns:
+        - REPOSITORY PATTERN: Encapsulates the complex Qdrant
+          filtering DSL behind a clean Python interface.
+        - HYBRID FUSION: Implicitly supports Reciprocal Rank Fusion (RRF)
+          when both dense and sparse vectors are provided.
 
     Usage:
-        store = QdrantVectorStore(url="http://localhost:6333", dimension=1024)
-        await store.upsert("centrag", "chunk-1", vector, payload)
-        results = await store.search("centrag", query_vec, VectorFilter.for_team("t1"))
+        store = QdrantVectorStore(url="...", dimension=1536)
+        # Filters are MANDATORY for production multi-tenancy
+        results = await store.search(..., filter=VectorFilter.for_team("t-123"))
     """
 
     def __init__(
@@ -177,7 +182,7 @@ class QdrantVectorStore:
 
         client = self._get_client()
         points = []
-        for i, (id_val, vec, pay) in enumerate(zip(ids, vectors, payloads)):
+        for i, (id_val, vec, pay) in enumerate(zip(ids, vectors, payloads, strict=False)):
             vector_data: Any = vec
             if sparse_vectors and i < len(sparse_vectors) and sparse_vectors[i]:
                 sv = sparse_vectors[i]
@@ -210,6 +215,16 @@ class QdrantVectorStore:
         from qdrant_client.models import Prefetch, SparseVector
 
         client = self._get_client()
+
+        # Mandatory Multi-Tenant Security Check
+        has_team_filter = any(c.get("key") == "team_id" for c in filter.must)
+        if not has_team_filter:
+            logger.error("security_violation_missing_team_id", collection=collection)
+            raise ValueError(
+                f"FATAL: Vector search in collection '{collection}' attempted without a 'team_id' filter. "
+                "This violates multi-tenant isolation policies."
+            )
+
         qdrant_filter = self._build_filter(filter)
 
         if sparse_vector:

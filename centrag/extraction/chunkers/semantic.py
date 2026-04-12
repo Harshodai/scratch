@@ -13,13 +13,16 @@ Design: STRATEGY PATTERN leaf — implements ChunkerProtocol.
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from centrag.abstractions.chunker import (
     ChunkingConfig,
     ChunkingStrategy,
     ChunkResult,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 def _split_into_sentences(text: str) -> list[str]:
@@ -32,7 +35,7 @@ def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     """Compute cosine similarity between two vectors."""
     if not vec_a or not vec_b:
         return 0.0
-    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    dot = sum(a * b for a, b in zip(vec_a, vec_b, strict=False))
     norm_a = sum(a * a for a in vec_a) ** 0.5
     norm_b = sum(b * b for b in vec_b) ** 0.5
     if norm_a == 0 or norm_b == 0:

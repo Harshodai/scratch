@@ -1,7 +1,15 @@
-"""
-Health routes — no auth required.
+"""Health and Readiness API — The Platform Heartbeat.
 
-SOLID: Single Responsibility — only health checks.
+The WHY:
+    In a high-availability production environment (Kubernetes, AWS ECS,
+    Railway), the infrastructure needs to know when to "Kill" and
+    "Restart" a service. These endpoints provide automated probes
+    that verify if the process is alive (Liveness) and if all its
+    dependencies (Postgres, Qdrant, Bedrock) are connected
+    (Readiness). This enables zero-downtime rolling deployments
+    and self-healing infrastructure.
+
+Required: pydantic, structlog, fastapi, uvicorn
 """
 
 from __future__ import annotations

@@ -30,21 +30,24 @@ logger = get_logger("implementations.embedder.bedrock")
 
 
 class BedrockEmbedder:
-    """
-    AWS Bedrock Titan Text Embeddings V2 implementation.
+    """Production-grade embedding engine utilizing Amazon Titan Models.
 
-    Implements EmbedderProtocol.
+    The WHY:
+        Embeddings are the bridge between human language and
+        mathematical similarity. This engine transforms unstructured
+        text into dense vector coordinates (up to 1024 dimensions)
+        using AWS Bedrock. By using the amazon.titan-embed-text-v2 model,
+        we achieve state-of-the-art retrieval precision while ensuring
+        low-latency inference for real-time RAG applications.
+
+    Design Pattern:
+        STRATEGY PATTERN — This is one of many possible embedder
+        implementations. It is injected into the `RetrievalEngine`
+        to handle the semantic transformation step.
 
     Usage:
-        embedder = BedrockEmbedder(
-            region_name="us-east-1",
-            dimension=1024,
-        )
-        vector = await embedder.embed_query("What is RAG?")
-
-    Configuration (via centrag.config.Settings):
-        CENTRAG_AWS_REGION         → region_name
-        CENTRAG_BEDROCK_EMBED_MODEL → model_id (default: amazon.titan-embed-text-v2:0)
+        embedder = BedrockEmbedder(region_name="us-east-1")
+        vector = await embedder.embed_query("Who is the CEO?")
     """
 
     def __init__(

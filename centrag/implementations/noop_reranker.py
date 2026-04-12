@@ -16,13 +16,26 @@ logger = get_logger("implementations.reranker.noop")
 
 
 class NoOpReranker:
-    """
-    Keyword-overlap reranker for development/testing.
+    """Keyword-Overlap Reranker for architectural validation.
 
-    Scores documents by counting word overlap with the query,
-    then sorts by score. Good enough to validate pipeline flow.
+    The WHY:
+        Cross-Encoder reranking (like Cohere or BGE) is computationally
+        expensive and slow. For local development or integration
+        testing, we often just need to verify that the "Rerank" step in
+        the `RetrievalEngine` is actually being called and that
+        documents are being re-ordered. The NoOpReranker uses a simple
+        token-overlap heuristic to provide a "good enough" reranking
+        for system tests without the API latency.
 
-    Implements RerankerProtocol.
+    Design Pattern:
+        PASS-THROUGH / OPTIONAL — Implements `RerankerProtocol`. It
+        allows the core engine to function even when a production
+        reranking credit budget is exhausted.
+
+    Usage:
+        reranker = NoOpReranker()
+        # Returns top-n results sorted by local keyword relevance
+        results = await reranker.rerank("query", ["doc1", "doc2"], top_n=5)
     """
 
     async def rerank(

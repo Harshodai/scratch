@@ -27,25 +27,25 @@ logger = get_logger("implementations.embedder.openai")
 
 
 class OpenAIEmbedder:
-    """
-    OpenAI Embeddings API implementation.
+    """Industry-standard embedding generation using OpenAI's text-embedding-3 models.
 
-    Implements EmbedderProtocol.
+    The WHY:
+        OpenAI provides high-density, standardized embeddings that are
+        compatible with almost every vector database. This implementation
+        focuses on high-throughput batching, allowing us to embed
+        thousands of document chunks in a single API call. This is
+        essential for the initial "Cold Indexing" of large document
+        repositories where speed is the primary bottleneck.
 
-    Uses the async client (AsyncOpenAI) for non-blocking I/O.
-    Supports both OpenAI and Azure OpenAI endpoints.
+    Design Pattern:
+        STRATEGY — Implements `EmbedderProtocol`. Its optimized
+        input-list processing makes it the ideal choice for heavy
+        ingestion jobs.
 
     Usage:
-        embedder = OpenAIEmbedder(
-            model="text-embedding-3-small",
-            dimension=1536,
-        )
-        vector = await embedder.embed_query("What is RAG?")
-
-    Configuration (via environment or constructor):
-        OPENAI_API_KEY     → api_key
-        OPENAI_API_BASE    → base_url (for Azure or proxies)
-        OPENAI_ORG_ID      → organization
+        embedder = OpenAIEmbedder(model="text-embedding-3-small")
+        # Optimized for batch ingestion
+        vectors = await embedder.embed_documents(["doc1", "doc2", ...])
     """
 
     def __init__(
@@ -127,12 +127,13 @@ class OpenAIEmbedder:
         """
         Embed multiple documents in a single API call.
 
-        OpenAI supports batch embedding — pass a list of strings
-        and get all embeddings back in one request. Much faster than
-        sequential calls.
+        OpenAI supports multi-input embedding — passing a list of
+        strings returns all embeddings in one request. This is
+        significantly faster than sequential singleton calls.
 
-        Note: Max batch size varies by model. For large batches,
-        chunk into groups of ~2000 texts.
+        The implementation chunks input into segments of 2000 to
+        remain within OpenAI API limits and processes these segments
+        sequentially.
         """
         if not texts:
             return []

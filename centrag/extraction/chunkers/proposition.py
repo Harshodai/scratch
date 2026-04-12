@@ -13,6 +13,7 @@ This is a Proof-of-Concept (PoC) implementation.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from centrag.abstractions.chunker import (
     ChunkerProtocol,
@@ -20,8 +21,10 @@ from centrag.abstractions.chunker import (
     ChunkingStrategy,
     ChunkResult,
 )
-from centrag.abstractions.llm import LLMProtocol
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.llm import LLMProtocol
 
 logger = get_logger("extraction.chunkers.proposition")
 
@@ -62,7 +65,7 @@ class PropositionChunker(ChunkerProtocol):
         2. If LLM is available, use it to 'standalone-ify' the sentences.
         3. Otherwise, use a 'Context Enrichment' heuristic.
         """
-        cfg = config or ChunkingConfig(strategy=ChunkingStrategy.RECURSIVE)  # Fallback
+        config = config or ChunkingConfig(strategy=ChunkingStrategy.RECURSIVE)  # Fallback
 
         # 1. Simple sentence splitting (PoC heuristic)
         # In production, use spacy or nltk

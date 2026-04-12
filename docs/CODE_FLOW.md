@@ -17,6 +17,7 @@
 7. [File Map](#file-map)
 8. [Glossary](#glossary)
 9. [Agent Ecosystem Mapping](#agent-ecosystem-mapping)
+10. [Documentation Standards](#documentation-standards)
 
 ---
 
@@ -24,8 +25,8 @@
 
 CentRAG does **two things**:
 
-1. **Ingest documents** — Upload a PDF/CSV/text/markdown → clean it → build indexes
-2. **Answer questions** — Ask a question → find relevant chunks → generate answer
+1. **Ingest documents** — Upload a PDF/CSV/text/markdown → clean it → build indexes (Enforced Immutability)
+2. **Answer questions** — Ask a question → find relevant chunks → generate answer (Mandatory Isolation)
 
 ```
   POST /v1/documents              POST /v1/retrieve
@@ -58,7 +59,8 @@ When you run `uvicorn centrag.app:create_app --factory`, this is the call chain:
 create_app()                                          # centrag/app.py:159
 │
 ├── settings = get_settings()                         # centrag/config.py → Settings (Pydantic)
-│   └── Reads CENTRAG_* env vars + .env file
+│   ├── Reads CENTRAG_* env vars + .env file
+│   └── FAIL-FAST: Rejects non-production infra URLs (localhost) in PRODUCTION mode
 │
 ├── app = FastAPI(title="CentRAG", lifespan=lifespan) # app.py:168
 │
@@ -275,6 +277,9 @@ ingest()
 │           ├── Generates 1-sentence situational summary for each chunk via LLM
 │           └── Prepends summary to chunk.content before indexing
 │       └── Returns: ExtractedDocument(text, content_type, metadata, pages)
+│           └── HARDENED: Immutable elements (tuple) and metadata (MappingProxyType)
+│               The WHY: Prevents downstream ingestion filters or re-rankers from 
+│               accidentally modifying the original source attributes during processing.
 │
 ├── Step 2: CLEAN
 │   └── DocumentCleaner.clean(text, filename)           # centrag/ingestion/cleaner.py:95
@@ -395,7 +400,9 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │   │
 │   ├── If VECTOR:
 │   │   embedder.embed_query(query) → vector              # EmbedderProtocol
-│   │   vectorstore.search(vector, filter, top_k, sparse_vectors) # VectorStoreProtocol
+│   ├── vectorstore.search(vector, filter, top_k, ...)    # VectorStoreProtocol
+│   │   └── HARDENED: Mandatory runtime check enforces `team_id` filter presence.
+│   │       FAIL-SAFE: Raises `RuntimeError` if isolation is bypassed.
 │   │   reranker.rerank(query, results)                   # RerankerProtocol
 │   │
 │   └── If HYBRID:
@@ -408,6 +415,10 @@ retrieve(request: RetrievalRequest, ctx: RequestContext)
 │   If enable_contextual_compression=True:
 │   └── RetrievalEngine._compress_context(query, chunks)
 │   └── LLM trims chunks to keep ONLY sections relevant to query
+│
+├── STEP 5.6: TOKEN BUDGETING (TokenBudgetManager)
+│   └── fit_context(sources)
+│   └── HARDENED: Sorts by `relevance_score` descending to prioritize high-value signal
 │
 ├── STEP 6: CRAG VALIDATION
 │   Check confidence of retrieved chunks via RerankerProtocol
@@ -791,6 +802,28 @@ docs/                               34 documentation files
 | **CRAG** | Corrective RAG — rewrite query if confidence too low | `engine.py` |
 | **Parent-Child** | Small child chunks (search) → parent chunks (LLM context) | `chunkers/parent_child.py` |
 | **ChunkResult** | Immutable chunk with 14 provenance fields | `abstractions/chunker.py` |
+
+---
+
+## Documentation Standards
+
+### "The WHY" Docstring Standard
+
+Every core business logic function MUST include a Google-style docstring with an explicit **The WHY** section.
+
+**Purpose:** 
+Production ecosystems are evolved by multiple agents and human engineers. Traditional docstrings describe *what* a function does. **The WHY** captures the architectural rationale, trade-offs, and critical constraints (like "Safe Default" patterns), ensuring that the *intent* of the code remains clear during automated refactoring sessions.
+
+**Example (from logger.py):**
+```python
+def get_processors():
+    """Configures the structlog processing pipeline.
+
+    The WHY:
+        Dynamic renderer selection is required to provide machine-readable JSON logs 
+        for production aggregators while maintaining human-friendly console output.
+    """
+```
 | **DocumentStore** | Filesystem store: `data/{team_id}/{doc_id}/` | `storage/document_store.py` |
 | **GuardrailViolation** | Exception raised by rails → 422 HTTP response | `abstractions/guardrail.py` |
 

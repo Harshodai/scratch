@@ -21,21 +21,23 @@ Usage:
 
 from __future__ import annotations
 
-import sys
 import argparse
-from collections.abc import AsyncIterator
+import sys
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 import structlog
-
 from mcp.server.fastmcp import FastMCP
 
-from mcp_enterprise_server.config import MCPServerConfig
-from mcp_enterprise_server.gosdb_mcp import GOSDBPool, GOSDBAppContext, register_gosdb_tools
-from mcp_enterprise_server.dynamodb_mcp import register_dynamodb_tools
 from mcp_enterprise_server.athena_mcp import register_athena_tools
-from mcp_enterprise_server.s3_mcp import register_s3_tools
+from mcp_enterprise_server.config import MCPServerConfig
+from mcp_enterprise_server.dynamodb_mcp import register_dynamodb_tools
+from mcp_enterprise_server.gosdb_mcp import GOSDBAppContext, GOSDBPool, register_gosdb_tools
 from mcp_enterprise_server.guardrails import init_guardrails
+from mcp_enterprise_server.s3_mcp import register_s3_tools
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 # ---------------------------------------------------------------------------
 # Structured logging setup
@@ -46,8 +48,7 @@ structlog.configure(
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
-        structlog.dev.ConsoleRenderer() if sys.stderr.isatty()
-        else structlog.processors.JSONRenderer(),
+        structlog.dev.ConsoleRenderer() if sys.stderr.isatty() else structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(0),
     context_class=dict,
@@ -127,37 +128,41 @@ def create_server() -> FastMCP:
     def server_info() -> str:
         """Server metadata and configuration summary."""
         import json
-        return json.dumps({
-            "name": config.server_name,
-            "version": config.server_version,
-            "tools": {
-                "gosdb": {
-                    "schemas": config.gosdb.allowed_schemas,
-                    "permission": config.gosdb.permission_level.value,
+
+        return json.dumps(
+            {
+                "name": config.server_name,
+                "version": config.server_version,
+                "tools": {
+                    "gosdb": {
+                        "schemas": config.gosdb.allowed_schemas,
+                        "permission": config.gosdb.permission_level.value,
+                    },
+                    "dynamodb": {
+                        "region": config.dynamodb.region.value,
+                        "tables": config.dynamodb.allowed_tables or ["*"],
+                        "permission": config.dynamodb.permission_level.value,
+                    },
+                    "s3": {
+                        "region": config.s3.region.value,
+                        "buckets": config.s3.allowed_buckets or ["*"],
+                        "permission": config.s3.permission_level.value,
+                    },
+                    "athena": {
+                        "region": config.athena.region.value,
+                        "workgroup": config.athena.workgroup,
+                        "databases": config.athena.allowed_databases or ["*"],
+                        "permission": config.athena.permission_level.value,
+                    },
                 },
-                "dynamodb": {
-                    "region": config.dynamodb.region.value,
-                    "tables": config.dynamodb.allowed_tables or ["*"],
-                    "permission": config.dynamodb.permission_level.value,
-                },
-                "s3": {
-                    "region": config.s3.region.value,
-                    "buckets": config.s3.allowed_buckets or ["*"],
-                    "permission": config.s3.permission_level.value,
-                },
-                "athena": {
-                    "region": config.athena.region.value,
-                    "workgroup": config.athena.workgroup,
-                    "databases": config.athena.allowed_databases or ["*"],
-                    "permission": config.athena.permission_level.value,
+                "guardrails": {
+                    "rate_limit": config.guardrails.global_rate_limit,
+                    "pii_redaction": config.guardrails.enable_pii_redaction,
+                    "audit_logging": config.guardrails.enable_audit_logging,
                 },
             },
-            "guardrails": {
-                "rate_limit": config.guardrails.global_rate_limit,
-                "pii_redaction": config.guardrails.enable_pii_redaction,
-                "audit_logging": config.guardrails.enable_audit_logging,
-            },
-        }, indent=2)
+            indent=2,
+        )
 
     logger.info(
         "server_configured",

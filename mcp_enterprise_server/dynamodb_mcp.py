@@ -25,27 +25,27 @@ Key Design Decisions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
-import asyncio
-from typing import Any, Optional
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
-import boto3
 import structlog
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-
-from mcp_enterprise_server.config import DynamoDBConfig, PermissionLevel
 from mcp_enterprise_server.aws_credentials import AWSCredentialManager
+from mcp_enterprise_server.config import DynamoDBConfig, PermissionLevel
 from mcp_enterprise_server.guardrails import (
-    validate_table_access,
+    audit_log,
+    cap_result_size,
     check_rate_limit,
     redact_pii,
-    cap_result_size,
-    audit_log,
+    validate_table_access,
 )
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import Context, FastMCP
+    from mcp.server.session import ServerSession
 
 logger = structlog.get_logger("dynamodb_mcp")
 
@@ -55,6 +55,7 @@ logger = structlog.get_logger("dynamodb_mcp")
 # ---------------------------------------------------------------------------
 class DynamoDBEncoder(json.JSONEncoder):
     """Custom JSON encoder for DynamoDB items (Decimal → float/int)."""
+
     def default(self, obj):
         if isinstance(obj, Decimal):
             if obj % 1 == 0:
@@ -94,6 +95,7 @@ class DynamoDBClient:
     # -- List Tables --
     async def list_tables(self) -> list[dict[str, Any]]:
         """List all DynamoDB tables, filtered by whitelist if configured."""
+
         def _list():
             client = self._get_client()
             paginator = client.get_paginator("list_tables")
@@ -103,9 +105,7 @@ class DynamoDBClient:
 
             # Apply whitelist filter
             if self._config.allowed_tables:
-                all_tables = [
-                    t for t in all_tables if t in self._config.allowed_tables
-                ]
+                all_tables = [t for t in all_tables if t in self._config.allowed_tables]
 
             return [{"table_name": t} for t in sorted(all_tables)]
 
@@ -128,10 +128,9 @@ class DynamoDBClient:
                 "item_count": table.get("ItemCount", 0),
                 "table_size_bytes": table.get("TableSizeBytes", 0),
                 "creation_date": table.get("CreationDateTime", "").isoformat()
-                if table.get("CreationDateTime") else None,
-                "billing_mode": table.get("BillingModeSummary", {}).get(
-                    "BillingMode", "PROVISIONED"
-                ),
+                if table.get("CreationDateTime")
+                else None,
+                "billing_mode": table.get("BillingModeSummary", {}).get("BillingMode", "PROVISIONED"),
                 "global_secondary_indexes": [
                     {
                         "index_name": gsi["IndexName"],
@@ -149,11 +148,11 @@ class DynamoDBClient:
         self,
         table_name: str,
         key_condition: str,
-        expression_values: Optional[dict[str, Any]] = None,
-        expression_names: Optional[dict[str, str]] = None,
-        filter_expression: Optional[str] = None,
-        index_name: Optional[str] = None,
-        max_items: Optional[int] = None,
+        expression_values: dict[str, Any] | None = None,
+        expression_names: dict[str, str] | None = None,
+        filter_expression: str | None = None,
+        index_name: str | None = None,
+        max_items: int | None = None,
         scan_forward: bool = True,
     ) -> list[dict[str, Any]]:
         """
@@ -202,10 +201,10 @@ class DynamoDBClient:
     async def scan_table(
         self,
         table_name: str,
-        filter_expression: Optional[str] = None,
-        expression_values: Optional[dict[str, Any]] = None,
-        expression_names: Optional[dict[str, str]] = None,
-        max_items: Optional[int] = None,
+        filter_expression: str | None = None,
+        expression_values: dict[str, Any] | None = None,
+        expression_names: dict[str, str] | None = None,
+        max_items: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Scan a DynamoDB table with optional filter.
@@ -246,8 +245,7 @@ class DynamoDBClient:
         """
         if self._config.permission_level == PermissionLevel.READ_ONLY:
             raise PermissionError(
-                "Write operations are not allowed in READ_ONLY mode. "
-                "Contact your administrator to upgrade permissions."
+                "Write operations are not allowed in READ_ONLY mode. Contact your administrator to upgrade permissions."
             )
 
         validate_table_access(table_name, self._config.allowed_tables)
@@ -265,7 +263,7 @@ class DynamoDBClient:
         self,
         table_name: str,
         key: dict[str, Any],
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get a single item by its primary key."""
         validate_table_access(table_name, self._config.allowed_tables)
 
@@ -291,8 +289,7 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
         name="list_dynamodb_tables",
         description=(
             "List all accessible DynamoDB tables. "
-            + (f"Whitelisted: {config.allowed_tables}" if config.allowed_tables
-               else "All tables accessible.")
+            + (f"Whitelisted: {config.allowed_tables}" if config.allowed_tables else "All tables accessible.")
         ),
     )
     async def tool_list_dynamodb_tables(
@@ -307,7 +304,8 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
             tables = await client.list_tables()
             response = json.dumps(
                 {"status": "success", "tables": tables, "count": len(tables)},
-                cls=DynamoDBEncoder, indent=2,
+                cls=DynamoDBEncoder,
+                indent=2,
             )
             response = redact_pii(response)
             duration = (time.monotonic() - start) * 1000
@@ -335,7 +333,8 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
             metadata = await client.describe_table(table_name)
             response = json.dumps(
                 {"status": "success", **metadata},
-                cls=DynamoDBEncoder, indent=2,
+                cls=DynamoDBEncoder,
+                indent=2,
             )
             duration = (time.monotonic() - start) * 1000
             audit_log("describe_dynamodb_table", caller, {"table": table_name}, "ok", True, duration)
@@ -356,10 +355,10 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
     async def tool_query_dynamodb(
         table_name: str,
         key_condition: str,
-        expression_values: Optional[str] = None,
-        expression_names: Optional[str] = None,
-        filter_expression: Optional[str] = None,
-        index_name: Optional[str] = None,
+        expression_values: str | None = None,
+        expression_names: str | None = None,
+        filter_expression: str | None = None,
+        index_name: str | None = None,
         max_items: int = 100,
         ctx: Context[ServerSession, Any] = None,
     ) -> str:
@@ -383,12 +382,20 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
             )
             response = json.dumps(
                 {"status": "success", "table": table_name, "item_count": len(items), "items": items},
-                cls=DynamoDBEncoder, indent=2,
+                cls=DynamoDBEncoder,
+                indent=2,
             )
             response = redact_pii(response)
             response = cap_result_size(response)
             duration = (time.monotonic() - start) * 1000
-            audit_log("query_dynamodb", caller, {"table": table_name, "key_condition": key_condition}, f"{len(items)} items", True, duration)
+            audit_log(
+                "query_dynamodb",
+                caller,
+                {"table": table_name, "key_condition": key_condition},
+                f"{len(items)} items",
+                True,
+                duration,
+            )
             return response
         except Exception as e:
             duration = (time.monotonic() - start) * 1000
@@ -404,9 +411,9 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
     )
     async def tool_scan_dynamodb(
         table_name: str,
-        filter_expression: Optional[str] = None,
-        expression_values: Optional[str] = None,
-        expression_names: Optional[str] = None,
+        filter_expression: str | None = None,
+        expression_values: str | None = None,
+        expression_names: str | None = None,
         max_items: int = 100,
         ctx: Context[ServerSession, Any] = None,
     ) -> str:
@@ -428,7 +435,8 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
             )
             response = json.dumps(
                 {"status": "success", "table": table_name, "item_count": len(items), "items": items},
-                cls=DynamoDBEncoder, indent=2,
+                cls=DynamoDBEncoder,
+                indent=2,
             )
             response = redact_pii(response)
             response = cap_result_size(response)
@@ -459,7 +467,8 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
             item = await client.get_item(table_name, key_dict)
             response = json.dumps(
                 {"status": "success" if item else "not_found", "table": table_name, "item": item},
-                cls=DynamoDBEncoder, indent=2,
+                cls=DynamoDBEncoder,
+                indent=2,
             )
             response = redact_pii(response)
             duration = (time.monotonic() - start) * 1000
@@ -473,9 +482,7 @@ def register_dynamodb_tools(mcp_server: FastMCP, config: DynamoDBConfig) -> None
     @mcp_server.tool(
         name="put_dynamodb_item",
         description=(
-            "Write an item to a DynamoDB table. "
-            "Requires READ_WRITE permission level. "
-            "Item should be a JSON string."
+            "Write an item to a DynamoDB table. Requires READ_WRITE permission level. Item should be a JSON string."
         ),
     )
     async def tool_put_dynamodb_item(

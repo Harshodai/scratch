@@ -33,26 +33,28 @@ Design:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
-import asyncio
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-
-from mcp_enterprise_server.config import AthenaConfig, PermissionLevel
 from mcp_enterprise_server.aws_credentials import AWSCredentialManager
 from mcp_enterprise_server.guardrails import (
     QueryValidationError,
-    validate_sql_query,
+    audit_log,
+    cap_result_size,
     check_rate_limit,
     redact_pii,
-    cap_result_size,
-    audit_log,
+    validate_sql_query,
 )
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import Context, FastMCP
+    from mcp.server.session import ServerSession
+
+    from mcp_enterprise_server.config import AthenaConfig
 
 logger = structlog.get_logger("athena_mcp")
 
@@ -82,7 +84,7 @@ class AthenaClient:
     async def start_query(
         self,
         query: str,
-        database: Optional[str] = None,
+        database: str | None = None,
     ) -> str:
         """
         Start an Athena query execution and return the QueryExecutionId.
@@ -94,14 +96,11 @@ class AthenaClient:
         # Validate database access
         if self._config.allowed_databases and effective_db not in self._config.allowed_databases:
             raise QueryValidationError(
-                f"Database '{effective_db}' is not in the allowed list: "
-                f"{self._config.allowed_databases}"
+                f"Database '{effective_db}' is not in the allowed list: {self._config.allowed_databases}"
             )
 
         # Validate SQL
-        validate_sql_query(
-            query, self._config.blocked_keywords, self._config.permission_level
-        )
+        validate_sql_query(query, self._config.blocked_keywords, self._config.permission_level)
 
         def _start():
             client = self._get_client()
@@ -139,8 +138,7 @@ class AthenaClient:
                 # Cancel the query if timeout exceeded
                 await self._cancel_query(query_execution_id)
                 raise TimeoutError(
-                    f"Athena query {query_execution_id} timed out after "
-                    f"{timeout}s. Query was cancelled."
+                    f"Athena query {query_execution_id} timed out after {timeout}s. Query was cancelled."
                 )
 
             status = await self._get_query_status(query_execution_id)
@@ -167,13 +165,8 @@ class AthenaClient:
                 }
 
             elif state in ("FAILED", "CANCELLED"):
-                reason = status["QueryExecution"]["Status"].get(
-                    "StateChangeReason", "Unknown"
-                )
-                raise RuntimeError(
-                    f"Athena query {state}: {reason} "
-                    f"(QueryExecutionId: {query_execution_id})"
-                )
+                reason = status["QueryExecution"]["Status"].get("StateChangeReason", "Unknown")
+                raise RuntimeError(f"Athena query {state}: {reason} (QueryExecutionId: {query_execution_id})")
 
             await asyncio.sleep(poll_interval)
 
@@ -184,6 +177,7 @@ class AthenaClient:
         max_rows: int = 1000,
     ) -> dict[str, Any]:
         """Fetch results of a completed Athena query."""
+
         def _fetch():
             client = self._get_client()
             paginator = client.get_paginator("get_query_results")
@@ -210,19 +204,16 @@ class AthenaClient:
                     first_page = False
 
                 for row in result_set.get("Rows", []):
-                    values = [
-                        datum.get("VarCharValue", None)
-                        for datum in row.get("Data", [])
-                    ]
+                    values = [datum.get("VarCharValue", None) for datum in row.get("Data", [])]
                     all_rows.append(values)
 
             # First row is typically the header in Athena results
             header = all_rows[0] if all_rows else []
-            data_rows = all_rows[1:max_rows + 1] if len(all_rows) > 1 else []
+            data_rows = all_rows[1 : max_rows + 1] if len(all_rows) > 1 else []
 
             # Convert to list of dicts
             col_names = [c["name"] for c in columns] if columns else header
-            records = [dict(zip(col_names, row)) for row in data_rows]
+            records = [dict(zip(col_names, row, strict=False)) for row in data_rows]
 
             return {
                 "columns": columns,
@@ -236,7 +227,7 @@ class AthenaClient:
     async def execute_query(
         self,
         query: str,
-        database: Optional[str] = None,
+        database: str | None = None,
         max_rows: int = 1000,
     ) -> dict[str, Any]:
         """
@@ -254,6 +245,7 @@ class AthenaClient:
     # -- List Databases (Glue Catalogs) --
     async def list_databases(self) -> list[dict[str, str]]:
         """List available Glue databases, filtered by whitelist."""
+
         def _list():
             client = self._get_client()
             paginator = client.get_paginator("list_databases")
@@ -261,28 +253,24 @@ class AthenaClient:
             for page in paginator.paginate(CatalogName=self._config.catalog):
                 for db in page.get("DatabaseList", []):
                     db_name = db["Name"]
-                    if (not self._config.allowed_databases or
-                            db_name in self._config.allowed_databases):
-                        databases.append({
-                            "name": db_name,
-                            "description": db.get("Description", ""),
-                        })
+                    if not self._config.allowed_databases or db_name in self._config.allowed_databases:
+                        databases.append(
+                            {
+                                "name": db_name,
+                                "description": db.get("Description", ""),
+                            }
+                        )
             return databases
 
         return await asyncio.to_thread(_list)
 
     # -- List Tables in Database --
-    async def list_tables_in_database(
-        self, database: Optional[str] = None
-    ) -> list[dict[str, str]]:
+    async def list_tables_in_database(self, database: str | None = None) -> list[dict[str, str]]:
         """List tables in an Athena/Glue database."""
         effective_db = database or self._config.database
 
-        if (self._config.allowed_databases and
-                effective_db not in self._config.allowed_databases):
-            raise QueryValidationError(
-                f"Database '{effective_db}' is not in the allowed list."
-            )
+        if self._config.allowed_databases and effective_db not in self._config.allowed_databases:
+            raise QueryValidationError(f"Database '{effective_db}' is not in the allowed list.")
 
         def _list():
             client = self._get_client()
@@ -293,14 +281,13 @@ class AthenaClient:
                 DatabaseName=effective_db,
             ):
                 for tbl in page.get("TableMetadataList", []):
-                    tables.append({
-                        "name": tbl["Name"],
-                        "type": tbl.get("TableType", ""),
-                        "columns": [
-                            {"name": c["Name"], "type": c.get("Type", "")}
-                            for c in tbl.get("Columns", [])
-                        ],
-                    })
+                    tables.append(
+                        {
+                            "name": tbl["Name"],
+                            "type": tbl.get("TableType", ""),
+                            "columns": [{"name": c["Name"], "type": c.get("Type", "")} for c in tbl.get("Columns", [])],
+                        }
+                    )
             return tables
 
         return await asyncio.to_thread(_list)
@@ -310,6 +297,7 @@ class AthenaClient:
         def _status():
             client = self._get_client()
             return client.get_query_execution(QueryExecutionId=query_execution_id)
+
         return await asyncio.to_thread(_status)
 
     async def _cancel_query(self, query_execution_id: str) -> None:
@@ -317,6 +305,7 @@ class AthenaClient:
             client = self._get_client()
             client.stop_query_execution(QueryExecutionId=query_execution_id)
             logger.warning("athena_query_cancelled", query_id=query_execution_id)
+
         await asyncio.to_thread(_cancel)
 
 
@@ -340,7 +329,7 @@ def register_athena_tools(mcp_server: FastMCP, config: AthenaConfig) -> None:
     )
     async def tool_execute_athena_query(
         query: str,
-        database: Optional[str] = None,
+        database: str | None = None,
         max_rows: int = 1000,
         ctx: Context[ServerSession, Any] = None,
     ) -> str:
@@ -360,16 +349,19 @@ def register_athena_tools(mcp_server: FastMCP, config: AthenaConfig) -> None:
             results = await client.execute_query(query, database, max_rows)
             response = json.dumps(
                 {"status": "success", **results},
-                indent=2, default=str,
+                indent=2,
+                default=str,
             )
             response = redact_pii(response)
             response = cap_result_size(response)
             duration = (time.monotonic() - start) * 1000
             audit_log(
-                "execute_athena_query", caller,
+                "execute_athena_query",
+                caller,
                 {"query": query[:200], "database": database or config.database},
                 f"{results.get('row_count', 0)} rows, {results.get('bytes_scanned', 0)} bytes scanned",
-                True, duration,
+                True,
+                duration,
             )
             return response
         except Exception as e:
@@ -408,7 +400,7 @@ def register_athena_tools(mcp_server: FastMCP, config: AthenaConfig) -> None:
         description="List tables in an Athena/Glue database with column metadata.",
     )
     async def tool_list_athena_tables(
-        database: Optional[str] = None,
+        database: str | None = None,
         ctx: Context[ServerSession, Any] = None,
     ) -> str:
         """List tables in a Glue database."""
@@ -434,13 +426,12 @@ def register_athena_tools(mcp_server: FastMCP, config: AthenaConfig) -> None:
     @mcp_server.tool(
         name="start_athena_query",
         description=(
-            "Start an Athena query without waiting for results. "
-            "Returns a QueryExecutionId to check status later."
+            "Start an Athena query without waiting for results. Returns a QueryExecutionId to check status later."
         ),
     )
     async def tool_start_athena_query(
         query: str,
-        database: Optional[str] = None,
+        database: str | None = None,
         ctx: Context[ServerSession, Any] = None,
     ) -> str:
         """Start an async Athena query. Use check_athena_query to get results."""
@@ -450,11 +441,14 @@ def register_athena_tools(mcp_server: FastMCP, config: AthenaConfig) -> None:
         try:
             check_rate_limit(caller, "start_athena_query")
             query_id = await client.start_query(query, database)
-            response = json.dumps({
-                "status": "started",
-                "query_execution_id": query_id,
-                "message": "Query started. Use check_athena_query tool to poll for results.",
-            }, indent=2)
+            response = json.dumps(
+                {
+                    "status": "started",
+                    "query_execution_id": query_id,
+                    "message": "Query started. Use check_athena_query tool to poll for results.",
+                },
+                indent=2,
+            )
             duration = (time.monotonic() - start) * 1000
             audit_log("start_athena_query", caller, {"query": query[:200]}, f"id={query_id}", True, duration)
             return response

@@ -8,21 +8,39 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from centrag.abstractions.llm import LLMProtocol
 from centrag.abstractions.query_transformer import QueryIntent, QueryTransformerProtocol
 from centrag.abstractions.vectorstore import VectorFilter
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.llm import LLMProtocol
 
 logger = get_logger("implementations.query_transformer")
 
 
 class LLMQueryExtractor(QueryTransformerProtocol):
-    """
-    Implements a fast-pass LLM extraction pattern to structurally parse a user query.
-    Extracts explicit metadata (like years, authors) into VectorFilters, and rewrites
-    the query to optimize semantic search (stripping out the filter keywords).
+    """Semantic Intent Parser using LLM-based reasoning.
+
+    The WHY:
+        Users ask questions in natural language (e.g., "What did we
+        sell in 2023?"), but databases require rigid filters
+        (e.g., year=2023). This extractor uses an LLM to "read"
+         the query, strip out the filter metadata, and transform
+        it into a clean semantic question + a structured
+        `VectorFilter`. This ensures that we don't just search
+        for the word "2023", but actually filter the results
+        to only include documents from that year.
+
+    Design Pattern:
+        STRATEGY — Implements the `QueryTransformerProtocol` to
+        provide a reason-heavy path for complex search queries.
+
+    Usage:
+        extractor = LLMQueryExtractor(llm)
+        intent = await extractor.transform("Reports by John about Q3", "team_1")
+        # intent.extracted_filter contains {"author": "John", "quarter": "Q3"}
     """
 
     def __init__(self, llm: LLMProtocol) -> None:
