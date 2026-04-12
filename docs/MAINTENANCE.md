@@ -80,16 +80,25 @@ pytest tests/ -v
 
 Every change must maintain the current pass rate (202+ tests). If you add a new component, add corresponding tests.
 
+### 7. Repository Hygiene (Optional but Recommended)
+
+To keep the repository clean of temporary Python artifacts and tool caches:
+
+```powershell
+Get-ChildItem -Path . -Include __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, *.pyc, *.pyo, *.pyd -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+```
+
 ---
 
-## Quick Reference: The 7-Step Post-Change Ritual
+## Quick Reference: The 8-Step Post-Change Ritual
 
 ```
 1. ✅ Code change complete
 2. 🔄 python centrag/scripts/sync_agentsview.py (Export sessions to AgentsView)
 3. 🔄 python -m code_review_graph build --repo .
-4. 📄 Update docs/CODE_FLOW.md (class names, file paths, flow diagrams)
-5. 📄 Update AGENTS.md (project structure tree, patterns table)
-6. 📄 Update README.md (features table, doc index, test count)
-7. 🧪 pytest tests/ -v (must pass)
+4. 🧹 Clean repository caches (See Step 7)
+5. 📄 Update docs/CODE_FLOW.md (class names, file paths, flow diagrams)
+6. 📄 Update AGENTS.md (condensed patterns table)
+7. 📄 Update README.md (features table, doc index, test count)
+8. 🧪 pytest tests/ -v (must pass)
 ```
