@@ -27,6 +27,10 @@ class RetrievalRequest:
     include_sources: bool = True
     mode: str = "rag"  # "auto" | "pageindex" | "vector" | "hybrid" | "rag"
     target_doc_id: str = ""  # Scope to a specific document (enables PageIndex)
+    metadata_filter: dict[str, Any] | None = None  # Explicit filters (e.g., {"post_year": "2024"})
+    
+    # Internal: Populated by RetrievalEngine after intent transformation
+    query_intent: Any | None = None  # Use Any to avoid circular import if needed
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,17 @@ class SourceChunk:
     document_id: str
     chunk_index: int
     relevance_score: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RetrievalResult:
+    """An intermediate result from a specific retrieval path (Graph, Multivector)."""
+
+    content: str
+    score: float
+    doc_id: str
+    filename: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

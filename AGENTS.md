@@ -24,6 +24,8 @@
 | **Tiered Cache** | `cache/orchestrator.py` | L1 (In-Memory) → L2 (Redis) for speed/cost |
 | **Advisor Loop** | `retrieval/engine.py` | Corrective RAG (CRAG) for validation |
 | **Two-Pass Reasoning** | `generator.py` | Grounding: Facts → Synthesis |
+| **Relational Graph** | `retrieval/graph_retriever.py` | Multi-hoprelational traversal (SQLite CTE) |
+| **Facet Weighting** | `retrieval/multivector_retriever.py` | Balanced score fusion across named vectors |
 
 ---
 
@@ -46,6 +48,10 @@ Use these `make` commands to verify your changes before completion.
 All settings use Pydantic with `CENTRAG_` prefix:
 - `CENTRAG_ENABLE_CONTEXTUAL_RETRIEVAL`: 2024 Anthropic situated context.
 - `CENTRAG_ENABLE_CONTEXTUAL_COMPRESSION`: Dynamic LLM-based context refinement.
+- `CENTRAG_ENABLE_GRAPH_EXTRACTION`: LLM-based triplet extraction.
+- `CENTRAG_ENABLE_GRAPH_RETRIEVAL`: Relational path activation.
+- `CENTRAG_ENABLE_MULTIVECTOR_RETRIEVAL`: Facet-based score fusion path.
+- `CENTRAG_ENABLE_CAG`: Static enterprise context injection.
 - `CENTRAG_LOG_RENDERER`: 'json' for production (ELK/Datadog), 'console' for human-readable dev logs.
 
 ### Rules of Engagement

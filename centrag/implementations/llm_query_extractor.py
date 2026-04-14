@@ -52,8 +52,22 @@ class LLMQueryExtractor(QueryTransformerProtocol):
             "{\n"
             '  "optimized_query": "The core semantic question WITHOUT the metadata filters",\n'
             '  "expansions": ["synonym", "broader category"],\n'
-            '  "filters": {"exact_key": "exact_value"}\n'
+            '  "filters": {"exact_key": "exact_value"},\n'
+            '  "reasoning_hops": 1\n'
             "}\n"
+            "\n"
+            "REASONING HOPS GUIDELINE:\n"
+            "- 0: Simple lookup, no graph needed.\n"
+            "- 1: Direct relationships (e.g. 'Who is X?').\n"
+            "- 2: Indirect/Multi-hop (e.g. 'How is X related to Y?').\n"
+            "- 3: Complex deep synthesis.\n"
+            "\n"
+            "VALID FILTER KEYS:\n"
+            "- 'post_title': Semantic title of document.\n"
+            "- 'post_year': 4-digit year as string.\n"
+            "- 'post_month': Month as string (e.g. 'January', '01').\n"
+            "- 'author': Name of the author.\n"
+            "\n"
             "If there are no explicit filters in the query, return an empty filters dictionary.\n"
             "Output ONLY valid JSON. No markdown formatting."
         )
@@ -87,6 +101,7 @@ class LLMQueryExtractor(QueryTransformerProtocol):
                 optimized_query=parsed.get("optimized_query", raw_query),
                 expansions=parsed.get("expansions", []),
                 extracted_filter=v_filter,  # v_filter explicitly contains the team_id base requirement
+                reasoning_hops=parsed.get("reasoning_hops", 0)
             )
 
             logger.info("query_transformed", original=raw_query, optimized=intent.optimized_query, filters=filters_dict)

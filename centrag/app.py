@@ -32,8 +32,8 @@ from centrag.ingestion.worker import IngestionWorker, WorkerConfig
 
 from centrag.middleware.rate_limiter import SimpleRateLimitMiddleware
 from centrag.storage.document_store import DocumentStore
-from centrag.utils.logger import get_logger
 from centrag.wiring import build_ingestion_service, build_retrieval_engine
+from centrag.utils.lifecycle import shutdown_registry
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -51,6 +51,7 @@ async def _init_postgres(app: FastAPI, settings: Settings):
             pool_size=settings.pg_pool_max,
             pool_pre_ping=True,
         )
+        shutdown_registry.register(app.state.db_engine.dispose, priority=50) # Close DB last
         logger.info("postgres_initialized", dsn_host=settings.pg_host)
     except Exception as e:
         logger.warning(
@@ -66,6 +67,7 @@ async def _init_redis(app: FastAPI, settings: Settings):
 
         app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         await app.state.redis.ping()
+        shutdown_registry.register(app.state.redis.close, priority=40)
         logger.info("redis_initialized", url=settings.redis_url)
     except Exception as e:
         logger.warning("redis_init_skipped", error=str(e), message="Running without Redis — L2 cache disabled.")
@@ -137,6 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config=WorkerConfig(),
     )
     await worker.start()
+    shutdown_registry.register(worker.shutdown, priority=10) # Drain worker first
     app.state.ingestion_worker = worker
 
     # --- Initialize MCP (Model Context Protocol) ---
@@ -166,17 +169,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield  # App runs here
 
     # --- Shutdown ---
-    # Stop worker first (gracefully finish current job)
-    if getattr(app.state, "ingestion_worker", None):
-        await app.state.ingestion_worker.shutdown()
-        logger.info("ingestion_worker_stopped")
-    if getattr(app.state, "db_engine", None):
-        await app.state.db_engine.dispose()
-        logger.info("postgres_closed")
-    if getattr(app.state, "redis", None):
-        await app.state.redis.close()
-        logger.info("redis_closed")
-    logger.info("centrag_shutdown")
+    await shutdown_registry.shutdown()
+    logger.info("centrag_shutdown_sequence_completed")
 
 
 def create_app() -> FastAPI:

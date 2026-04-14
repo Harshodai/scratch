@@ -40,6 +40,7 @@ class ChunkingStrategy(StrEnum):
     SEMANTIC = "semantic"  # Embedding-based semantic boundary detection
     STRUCTURE_AWARE = "structure_aware"  # Header/section-aware splitting
     PROPOSITION = "proposition"  # Atomic fact extraction (RAG Made Simple Ch 4)
+    HIERARCHICAL = "hierarchical"  # Multi-level tree (Leaf -> Parent -> Section)
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,8 @@ class ChunkResult:
     # Parent-child indexing (Phase 4)
     parent_chunk_id: str | None = None  # For child chunks → parent reference
     chunk_id: str = ""  # Unique chunk identifier
+    level: str = "leaf"  # "leaf", "block", "section", "document"
+    breadcrumb_path: str = ""  # Hierarchy path (e.g., "Doc Title > Section 1 > Intro")
 
     # Extensible metadata
     metadata: dict[str, Any] = field(default_factory=dict)

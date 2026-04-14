@@ -75,12 +75,13 @@ gantt
 | **Continual Learning** | SWE-AF `enable_learning`, failure pattern injection. | Build retrieval feedback loop: log failed queries → analyze patterns → improve prompts. | 4h |
 | **Performance Budgets** | Claude Code `slow_logger`. Our `track_slow_operation` middleware. | Review and extend performance budget system. Add alerts for P95 violations. | 3h |
 | **MCP Deployment** | See `MCP_DEPLOYMENT_GUIDE.md`. Oracle SQLcl + AWS Labs MCP setup. | Deploy Oracle GOS DB and DynamoDB MCP servers locally. Verify end-to-end. | 4h |
-| **RAG Evaluation** | [RAGAS](https://github.com/explodinggradients/ragas) — faithfulness, relevancy, context precision. | Set up RAGAS evaluation pipeline for CentRAG retrieval quality. | 4h |
+| **RAG Evaluation** | [RAGAS](https://github.com/explodinggradients/ragas) — faithfulness, relevancy, context precision. | Set up RAGAS evaluation pipeline. Compare naive vs layout-aware chunking results. | 4h |
+| **Advanced Chunking** | [RETRIEVAL_STRATEGY_DEEP_DIVE.md](file:///C:/Users/khars/PycharmProjects/scratch/docs/RETRIEVAL_STRATEGY_DEEP_DIVE.md). Table preservation patterns. | Implement "Row-Header" table preservation logic in a prototype worker. | 4h |
 
 **Week 7-8 Deliverables:**
 - [ ] Session checkpointing module (save/restore to PostgreSQL)
 - [ ] Working MCP connections to Oracle GOS DB and DynamoDB
-- [ ] RAGAS evaluation baseline numbers
+- [ ] RAGAS evaluation baseline numbers (Naive vs. Layout-Aware)
 
 ---
 
@@ -164,10 +165,12 @@ gantt
 |------|:------:|:----------:|
 | Implement LLM-driven query complexity classifier | ☐ | Phase 2 |
 | Add complexity-based routing (cache → standard → deep) | ☐ | classifier |
+| Implement **Layout-Aware Chunking** (preserves tables/lists) | ☐ | Unstructured/Docling |
+| Add **Hierarchical Indexing** (parent-child retrieval) | ☐ | — |
 | Build Contextual Retrieval (chunk-level document context) | ☐ | — |
 | Implement Late Chunking for better embedding quality | ☐ | — |
 | Add reranking with Cohere cross-encoder | ☐ | — |
-| Build RAGAS evaluation pipeline | ☐ | — |
+| Build RAGAS evaluation pipeline (comparing strategies) | ☐ | — |
 
 ### Phase 4: Resilience & Session Recovery (2 weeks)
 

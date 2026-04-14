@@ -83,13 +83,14 @@ class VectorStoreProtocol(Protocol):
         self,
         collection: str,
         id: str,
-        vector: list[float],
+        vector: list[float] | dict[str, list[float]],
         payload: dict[str, Any],
         sparse_vector: dict[int, float] | None = None,
     ) -> None:
         """Insert or update a single vector with associated data.
 
         The WHY:
+            Support for `vector` as a dict enables Named Vectors (Multivector).
             Support for `sparse_vector` enables Hybrid Search
             capabilities inside the same upsert transaction.
         """
@@ -99,15 +100,16 @@ class VectorStoreProtocol(Protocol):
         self,
         collection: str,
         ids: list[str],
-        vectors: list[list[float]],
+        vectors: list[list[float]] | list[dict[str, list[float]]],
         payloads: list[dict[str, Any]],
-        sparse_vector: list[dict[int, float] | None] | None = None,
+        sparse_vectors: list[dict[int, float] | None] | None = None,
     ) -> None:
         """Batch upsert to maximize ingestion throughput.
 
         Optimization:
             Reduces network overhead by grouping multiple vectors
-            into a single database call.
+            into a single database call. Handles both single and 
+            named vectors for Multivector/Facet search.
         """
         ...
 
@@ -119,18 +121,20 @@ class VectorStoreProtocol(Protocol):
         limit: int = 10,
         score_threshold: float | None = None,
         sparse_vector: dict[int, float] | None = None,
+        vector_name: str | None = None,
     ) -> list[VectorSearchResult]:
         """Perform a context-aware vector search.
 
         The WHY:
             Accepts both dense and sparse vectors to perform
             "Reciprocal Rank Fusion" (Hybrid Search) if the store
-            supports it.
+            supports it. `vector_name` enables Facet/Multivector search.
 
         Args:
             vector: The dense embedding (float list).
             filter: Mandatory VectorFilter for team isolation.
             sparse_vector: Optional keyword-importance map.
+            vector_name: Optional name of the vector to query (e.g. "summary").
 
         Returns:
             list[VectorSearchResult]: Top-K results sorted by score.

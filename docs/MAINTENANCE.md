@@ -91,7 +91,7 @@ We use the **Google Style** for all Python docstrings. To ensure consistency:
 To keep the repository clean of temporary Python artifacts and tool caches, run the following command as part of every ritual:
 
 ```powershell
-Get-ChildItem -Path . -Include __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, *.pyc, *.pyo, *.pyd, .agents, .gemini -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path . -Include __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, *.pyc, *.pyo, *.pyd -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ---

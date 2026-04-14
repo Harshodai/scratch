@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import random
 
+from centrag.extraction.embedder_utils import LateChunkingSimulator
 from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.embedder.noop")
@@ -75,15 +76,12 @@ class NoOpEmbedder:
         chunk_boundaries: list[tuple[int, int]],
     ) -> list[list[float]]:
         """
-        Late chunking stub — embeds each chunk independently.
-
-        A real implementation would embed the full document first,
-        then pool token embeddings per boundary.
+        Late chunking stub — simulates contextual pooling.
         """
         logger.debug(
             "noop_late_chunking",
             text_len=len(full_text),
             chunk_count=len(chunk_boundaries),
         )
-        chunks = [full_text[start:end] for start, end in chunk_boundaries]
-        return [self._text_to_vector(c) for c in chunks]
+        simulator = LateChunkingSimulator(self)
+        return await simulator.simulate_late_chunking(full_text, chunk_boundaries)

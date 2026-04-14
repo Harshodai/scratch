@@ -156,10 +156,15 @@ class RetrievalEngine:
         # --- SHARED: Dual-path routing (Day 3) ---
         query_router: Any | None = None,
         hybrid_retriever: Any | None = None,
+        # --- PHASE 4: Relational & Facet paths ---
+        graph_retriever: Any | None = None,
+        multivector_retriever: Any | None = None,
+        cag_manager: Any | None = None,
         # --- QUERY TRANSFORMATION ---
         query_transformer: Any | None = None,
         # --- TWO-PASS GENERATION ---
         generator: TwoPassGenerator | None = None,
+        collection_name: str = "centrag",
     ) -> None:
         # Pattern 3: Pervasive Lazy Loading
         # SDKs (boto3, transformers) only initialize when their property is first accessed.
@@ -187,8 +192,15 @@ class RetrievalEngine:
         # SHARED: Dual-path routing
         self._query_router = query_router
         self._hybrid_retriever = hybrid_retriever
+
+        # PHASE 4 components
+        self._graph_retriever = graph_retriever
+        self._multivector_retriever = multivector_retriever
+        self._cag_manager = cag_manager
+
         self._query_transformer = query_transformer
         self._generator = generator
+        self._collection_name = collection_name
 
         self.__embedder = None
         self.__vectorstore = None
@@ -290,13 +302,18 @@ class RetrievalEngine:
                 )
                 return cached_response
 
-            # --- Step 2.5: Query Transformation (Metadata Extraction) ---
+            # --- Step 2.5: Query Transformation (Intent & Metadata Extraction) ---
             query_filter: VectorFilter | None = None
+            query_intent = None
             if self._query_transformer:
-                intent = await self._query_transformer.transform(sanitized_query, ctx.team_id)
-                sanitized_query = intent.optimized_query
-                query_filter = intent.extracted_filter
-                log.info("query_transformed", optimized_query=sanitized_query, has_filters=bool(query_filter))
+                query_intent = await self._query_transformer.transform(sanitized_query, ctx.team_id)
+                sanitized_query = query_intent.optimized_query
+                query_filter = query_intent.extracted_filter
+                log.info("query_transformed", optimized_query=sanitized_query, has_filters=bool(query_filter), hops=query_intent.reasoning_hops)
+
+            # Update request with intent for downstream sub-retrievers (Graph, Multivector)
+            from dataclasses import replace
+            request = replace(request, query=sanitized_query, query_intent=query_intent)
 
             # --- Step 3: Retrieval (DUAL-PATH) ---
             # Route to VECTORLESS or VECTOR path based on request.mode
@@ -346,30 +363,82 @@ class RetrievalEngine:
                     )
 
             if not sources:
-                # ── VECTOR PATH (embed → search → rerank) ──────────
-                if retrieval_source == "pageindex":
-                    log.info("pageindex_empty_fallback_to_vector")
-                retrieval_source = "vector" if not use_pageindex else retrieval_source
+                # ── Step 3.1: RELATIONAL PATH — Graph RAG (Phase 4) ────────────────
+                if settings.enable_graph_retrieval and self._graph_retriever:
+                    log.info("triggering_graph_retrieval", hops=request.query_intent.reasoning_hops if request.query_intent else 1)
+                    graph_resp = await self._graph_retriever.retrieve(request)
+                    if graph_resp.results:
+                        graph_sources = [
+                            SourceChunk(
+                                content=r.content,
+                                document_id=r.doc_id,
+                                chunk_index=0,
+                                relevance_score=r.score,
+                                metadata={**r.metadata, "source": "graph"}
+                            ) for r in graph_resp.results
+                        ]
+                        sources.extend(graph_sources)
+                        log.info("graph_retrieval_hits", count=len(graph_sources))
 
-                query_embedding = await self._embedder.embed_query(sanitized_query)
-                sparse_vector = (
-                    await self._sparse_embedder.embed_sparse(sanitized_query) if self._sparse_embedder else None
-                )
-                embed_token_estimate = len(sanitized_query.split()) * 2
-                # Ensure team-isolation is ALWAYS the baseline filter before merging LLM extractions
-                search_filter = VectorFilter.for_team(ctx.team_id)
-                if query_filter:
-                    search_filter.must.extend(query_filter.must)
-                    search_filter.must_not.extend(query_filter.must_not)
-                search_filter = search_filter.with_condition("namespace", request.namespace)
-                raw_results = await self._vectorstore.search(
-                    collection="documents",
-                    vector=query_embedding,
-                    filter=search_filter,
-                    limit=request.max_results * 3,
-                    sparse_vector=sparse_vector,
-                )
-                log.info("vector_search_complete", result_count=len(raw_results))
+                # ── Step 3.2: FACET PATH — Multivector RAG (Phase 4) ─────────────
+                if settings.enable_multivector_retrieval and self._multivector_retriever:
+                    log.info("triggering_multivector_retrieval")
+                    mv_resp = await self._multivector_retriever.retrieve(
+                        RetrievalRequest(
+                            query=sanitized_query,
+                            team_id=ctx.team_id,
+                            namespace=request.namespace,
+                            limit=request.max_results
+                        )
+                    )
+                    if mv_resp.results:
+                        mv_sources = [
+                            SourceChunk(
+                                content=r.content,
+                                document_id=r.doc_id,
+                                chunk_index=r.metadata.get("chunk_index", 0),
+                                relevance_score=r.score,
+                                metadata={**r.metadata, "source": "multivector"}
+                            ) for r in mv_resp.results
+                        ]
+                        sources.extend(mv_sources)
+                        log.info("multivector_retrieval_hits", count=len(mv_sources))
+
+                # ── Step 3.3: STANDARD VECTOR PATH (embed → search → rerank) ──────────
+                if not sources:
+                    if retrieval_source == "pageindex":
+                        log.info("pageindex_empty_fallback_to_vector")
+                    retrieval_source = "vector" if not use_pageindex else retrieval_source
+
+                    query_embedding = await self._embedder.embed_query(sanitized_query)
+                    sparse_vector = (
+                        await self._sparse_embedder.embed_sparse(sanitized_query) if self._sparse_embedder else None
+                    )
+                    embed_token_estimate = len(sanitized_query.split()) * 2
+                    # Ensure team-isolation is ALWAYS the baseline filter before merging LLM extractions
+                    search_filter = VectorFilter.for_team(ctx.team_id)
+                    
+                    # 1. Merge LLM-extracted filters (Adaptive RAG)
+                    if query_filter:
+                        search_filter.must.extend(query_filter.must)
+                        search_filter.must_not.extend(query_filter.must_not)
+                        
+                    # 2. Merge explicit API-provided filters
+                    if request.metadata_filter:
+                        for k, v in request.metadata_filter.items():
+                            search_filter = search_filter.with_condition(k, v)
+                            
+                    # 3. Apply namespace scoping
+                    search_filter = search_filter.with_condition("namespace", request.namespace)
+                    
+                    raw_results = await self._vectorstore.search(
+                        collection=self._collection_name,
+                        vector=query_embedding,
+                        filter=search_filter,
+                        limit=request.max_results * 3,
+                        sparse_vector=sparse_vector,
+                    )
+                    log.info("vector_search_complete", result_count=len(raw_results))
 
             if not raw_results and not sources:
                 return RetrievalResponse(
@@ -444,10 +513,18 @@ class RetrievalEngine:
                         document_id=raw_results[chunk.index].payload.get("document_id", ""),
                         chunk_index=raw_results[chunk.index].payload.get("chunk_index", 0),
                         relevance_score=chunk.relevance_score,
-                        metadata={"source": "vector"},
+                        metadata={
+                            "source": "vector",
+                            "parent_chunk_id": raw_results[chunk.index].payload.get("parent_chunk_id"),
+                        },
                     )
                     for chunk in confident_chunks
                 ]
+
+                # --- Step 5.2: Hierarchical Context Expansion ---
+                if settings.enable_hierarchical_retrieval:
+                    log.info("expanding_hierarchical_context", source_count=len(sources))
+                    sources = await self._expand_hierarchical_context(sources, ctx.team_id)
 
             # --- Step 5.5: Contextual Compression (LLM-based refinement) ---
             settings = get_settings()
@@ -466,12 +543,23 @@ class RetrievalEngine:
                 memory_context = [m.content for m in memories if m.is_current]
                 log.info("memory_recalled", count=len(memory_context))
 
+            # --- Step 6.1: CAG Static Context (Phase 4) ---
+            static_context = ""
+            if self._cag_manager:
+                static_context = await self._cag_manager.get_static_context(ctx.team_id, request.namespace)
+                if static_context:
+                    log.info("cag_context_injected", length=len(static_context))
+
             # --- Step 7: Generate ---
             # Pattern 8: Dynamic Context Compression via TokenBudgetManager
             sources = self.budget_manager.fit_context(sources)
             context_texts = [s.content for s in sources]
             if memory_context:
                 context_texts = memory_context + context_texts
+            
+            if static_context:
+                # CAG context goes at the top as 'Base Knowledge'
+                context_texts = [f"### BASE KNOWLEDGE (CAG)\n{static_context}"] + context_texts
 
             # Pattern 10: Adaptive Thinking Prompting
             adaptive_prompt = (
@@ -538,6 +626,62 @@ class RetrievalEngine:
                 success=(error_msg is None),
                 error=error_msg,
             )
+
+    async def _expand_hierarchical_context(
+        self,
+        sources: list[SourceChunk],
+        team_id: str,
+    ) -> list[SourceChunk]:
+        """
+        Recursive Shadow Retrieval: Expand leaf chunks to parents/sections.
+        
+        The WHY:
+            Retrieval needs small chunks (precision). LLMs need large chunks (context).
+            If a leaf chunk was retrieved, we fetch its parent from the DocumentStore
+            to provide the LLM with the full semantic block.
+        """
+        if not self._document_store:
+            return sources
+
+        expanded_chunks = []
+        for chunk in sources:
+            parent_id = chunk.metadata.get("parent_chunk_id")
+            if not parent_id:
+                expanded_chunks.append(chunk)
+                continue
+
+            try:
+                # Fetch full chunk list for this doc from store
+                doc_chunks = await self._document_store.get_chunks(team_id, chunk.document_id)
+                if not doc_chunks:
+                    expanded_chunks.append(chunk)
+                    continue
+
+                # Create a map for fast lookup
+                chunk_map = {c["chunk_id"]: c for c in doc_chunks if "chunk_id" in c}
+                
+                # Climb the tree (Limited to 2 levels for now to prevent bloating)
+                current_id = parent_id
+                depth = 0
+                final_content = chunk.content
+                
+                while current_id in chunk_map and depth < 2:
+                    parent = chunk_map[current_id]
+                    final_content = parent.get("content", final_content)
+                    current_id = parent.get("parent_chunk_id")
+                    depth += 1
+
+                from dataclasses import replace
+                expanded_chunks.append(replace(
+                    chunk, 
+                    content=f"[Context Expanded]\n{final_content}",
+                    metadata={**chunk.metadata, "expansion_depth": depth}
+                ))
+            except Exception as e:
+                logger.warning("hierarchical_expansion_failed", error=str(e), doc_id=chunk.document_id)
+                expanded_chunks.append(chunk)
+
+        return expanded_chunks
 
     async def _compress_context(self, query: str, sources: list[SourceChunk]) -> list[SourceChunk]:
         """

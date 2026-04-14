@@ -55,10 +55,10 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 2 | **Stateless Services** | All compute is horizontally scalable containers; state lives in managed datastores |
 | 3 | **Defence in Depth** | API key → rate limit → namespace guard → SQL validation → PII redaction → audit log |
 | 4 | **Event-Driven Ingestion** | Upload → SQS → async worker (never blocks the API thread) |
-| 5 | **Hybrid RAG** | Dense + Sparse + KG retrieval, fused by a cross-encoder re-ranker |
-| 6 | **Tiered Caching** | L1 (in-process) → L2 (exact) → L3 (semantic) → L4 (full RAG) |
-| 7 | **Observability First** | Every chain has a `trace_id` linking query → retrieval → generation → response |
-| 8 | **Policy-as-Code** | Access policies, retention rules, PII patterns defined as versioned code |
+| 5 | **Hybrid RAG** | Dense + Sparse + KG retrieval, fused by a cross-encoder re-ranker. Augmented by **Layout-Aware Ingestion** for structural fidelity. |
+| 6 | **Tiered Caching** | L1 (in-process) → L2 (exact) → L3 (semantic) → L4 (full RAG). |
+| 7 | **Observability First** | Every chain has a `trace_id` linking query → retrieval → generation → response. |
+| 8 | **Policy-as-Code** | Access policies, retention rules, PII patterns defined as versioned code. |
 | 9 | **Graceful Shutdown** | All services implement tiered shutdown: drain requests → flush analytics → close connections → force-exit with failsafe timeout. Prevents data loss on SIGTERM/SIGINT during rolling deployments. |
 | 10 | **Session Recovery** | Long-running retrieval sessions can be resumed after crash or disconnect. Conversation state is checkpointed to durable storage (PostgreSQL), allowing clients to reconnect without replaying from scratch. |
 | 11 | **Performance Budgets** | Every async operation has a latency budget. Operations exceeding their budget are automatically logged as `slow_operation_detected` warnings with stack traces, enabling zero-effort bottleneck discovery. |
@@ -67,6 +67,7 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 14 | **MCP-First Integration** | All external data source connections (Oracle GOS DB, DynamoDB, Confluence, etc.) are exposed as MCP servers using stdio transport. The retrieval engine acts as an MCP client. This standardizes all integrations via the Model Context Protocol. See `MCP_DEPLOYMENT_GUIDE.md`. |
 | 15 | **Deep Immutability** | Core document abstractions enforce strict read-only state at the application level to prevent accidental mutation during retrieval/ingestion flows (e.g., `ExtractedDocument`). |
 | 16 | **Fail-Fast Configuration** | Boot-time validators reject non-production infrastructure URLs (e.g., `localhost`) when the system is in `production` mode, preventing silent configuration leaks. |
+| 17 | **Layout-Aware Ingestion** | We prioritize **Structure over Size**. Documents are parsed into structural elements (tables, lists, headers) before chunking to preserve semantic relationships. See `RETRIEVAL_STRATEGY_DEEP_DIVE.md`. |
 
 ### 2.3 Development Practices
 
@@ -138,9 +139,10 @@ graph TB
         ING_API["Ingestion API<br/>(FastAPI)"]
         SQS["SQS FIFO Queue"]
         WORKER["Ingestion Workers<br/>(ECS Fargate, auto-scale)"]
-        PARSE["Parser Service<br/>(Unstructured.io)"]
-        CHUNK["Semantic Chunker<br/>(LangChain)"]
-        EMBED["Embedding Service<br/>(Bedrock Titan v2)"]
+        PARSE["Parser Service<br/>(Unstructured.io / Docling)"]
+        CHUNK["Layout-Aware Chunker<br/>(Structural + Hierarchical)"]
+        EMBED["Embedding Service<br/>(Late Chunking Support)"]
+        QDRANT["Qdrant Cluster<br/>(Namespace Isolated)"]
     end
 
     subgraph "Data Plane — Retrieval"

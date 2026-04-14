@@ -86,17 +86,29 @@ class QdrantVectorStore:
                 collections = self._client.get_collections().collections
                 exists = any(c.name == self._collection for c in collections)
                 if not exists:
+                    # Named vectors config for Phase 4 Multivector
+                    vectors_config = {
+                        "": VectorParams(size=self._dimension, distance=Distance.COSINE, on_disk=self._on_disk),
+                        "summary": VectorParams(size=self._dimension, distance=Distance.COSINE, on_disk=self._on_disk),
+                        "keywords": VectorParams(size=self._dimension, distance=Distance.COSINE, on_disk=self._on_disk),
+                    }
+                    
                     self._client.create_collection(
                         collection_name=self._collection,
-                        vectors_config=VectorParams(
-                            size=self._dimension,
-                            distance=Distance.COSINE,
-                            on_disk=self._on_disk,
-                        ),
+                        vectors_config=vectors_config,
                         sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.NONE)},
                     )
+                    
+                    # Create payload indices for fast filtering at scale
+                    self._client.create_payload_index(self._collection, "team_id", field_schema="keyword")
+                    self._client.create_payload_index(self._collection, "namespace", field_schema="keyword")
+                    self._client.create_payload_index(self._collection, "post_year", field_schema="keyword")
+                    self._client.create_payload_index(self._collection, "post_month", field_schema="keyword")
+                    self._client.create_payload_index(self._collection, "post_title", field_schema="keyword")
+                    
+                    logger.info("vector_collection_initialized", name=self._collection, dimension=self._dimension)
                     logger.info(
-                        "qdrant_collection_created",
+                        "qdrant_collection_created_with_multivector",
                         name=self._collection,
                         dimension=self._dimension,
                     )
@@ -148,20 +160,27 @@ class QdrantVectorStore:
         self,
         collection: str,
         id: str,
-        vector: list[float],
+        vector: list[float] | dict[str, list[float]],
         payload: dict[str, Any],
         sparse_vector: dict[int, float] | None = None,
     ) -> None:
         """Insert or update a single vector with payload."""
         from qdrant_client.models import PointStruct, SparseVector
 
-        # If a sparse vector is provided, Qdrant allows passing a dict of vectors
-        vector_data: Any = vector
+        # Handle Named Vectors (Multivector)
+        if isinstance(vector, dict):
+            vector_data = dict(vector)
+            # Map "" to the unnamed vector if present in protocol but expected in qdrant
+            if "" not in vector_data and "default" in vector_data:
+                vector_data[""] = vector_data.pop("default")
+        else:
+            vector_data = {"": vector}
+
         if sparse_vector:
-            vector_data = {
-                "": vector,  # "" is the default unnamed dense vector
-                "sparse": SparseVector(indices=list(sparse_vector.keys()), values=list(sparse_vector.values())),
-            }
+            vector_data["sparse"] = SparseVector(
+                indices=list(sparse_vector.keys()), 
+                values=list(sparse_vector.values())
+            )
 
         client = self._get_client()
         client.upsert(
@@ -173,7 +192,7 @@ class QdrantVectorStore:
         self,
         collection: str,
         ids: list[str],
-        vectors: list[list[float]],
+        vectors: list[list[float]] | list[dict[str, list[float]]],
         payloads: list[dict[str, Any]],
         sparse_vectors: list[dict[int, float] | None] | None = None,
     ) -> None:
@@ -183,12 +202,19 @@ class QdrantVectorStore:
         client = self._get_client()
         points = []
         for i, (id_val, vec, pay) in enumerate(zip(ids, vectors, payloads, strict=False)):
-            vector_data: Any = vec
+            if isinstance(vec, dict):
+                v_data = dict(vec)
+                if "" not in v_data and "default" in v_data:
+                    v_data[""] = v_data.pop("default")
+            else:
+                v_data = {"": vec}
+
             if sparse_vectors and i < len(sparse_vectors) and sparse_vectors[i]:
                 sv = sparse_vectors[i]
                 assert sv is not None
-                vector_data = {"": vec, "sparse": SparseVector(indices=list(sv.keys()), values=list(sv.values()))}
-            points.append(PointStruct(id=id_val, vector=vector_data, payload=pay))
+                v_data["sparse"] = SparseVector(indices=list(sv.keys()), values=list(sv.values()))
+            
+            points.append(PointStruct(id=id_val, vector=v_data, payload=pay))
 
         # Qdrant batch size limit is ~100 points per request
         batch_size = 100
@@ -210,11 +236,15 @@ class QdrantVectorStore:
         limit: int = 10,
         score_threshold: float | None = None,
         sparse_vector: dict[int, float] | None = None,
+        vector_name: str | None = None,
     ) -> list[VectorSearchResult]:
         """Filtered vector search. ALWAYS requires a team_id filter."""
         from qdrant_client.models import Prefetch, SparseVector
 
         client = self._get_client()
+
+        # Phase 4: Map name to Qdrant internal names
+        using = vector_name if vector_name and vector_name != "default" else ""
 
         # Mandatory Multi-Tenant Security Check
         has_team_filter = any(c.get("key") == "team_id" for c in filter.must)
@@ -229,11 +259,12 @@ class QdrantVectorStore:
 
         if sparse_vector:
             # Qdrant Hybrid Search (RRF Native) using Prefetch
-            # We prefetch both dense and sparse, then Qdrant merges them.
+            from qdrant_client.models import Fusion, FusionQuery
+            
             prefetch = [
                 Prefetch(
                     query=vector,
-                    using="",
+                    using=using,
                     limit=limit * 2,
                     filter=qdrant_filter,
                 ),
@@ -248,15 +279,16 @@ class QdrantVectorStore:
             results = client.query_points(
                 collection_name=collection,
                 prefetch=prefetch,
-                query=None,  # None triggers Qdrant's automatic Fusion RRF
+                query=FusionQuery(fusion=Fusion.RRF),
                 limit=limit,
                 score_threshold=score_threshold,
             ).points
         else:
-            # Legacy Dense-only search
+            # Dense-only search (supports named vectors)
             results = client.search(
                 collection_name=collection,
                 query_vector=vector,
+                using=using,
                 query_filter=qdrant_filter,
                 limit=limit,
                 score_threshold=score_threshold,

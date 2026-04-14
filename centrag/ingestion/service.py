@@ -41,8 +41,11 @@ from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
     from centrag.abstractions.tree_index import TreeIndexProtocol
+    from centrag.abstractions.extractor import ExtractedDocument
     from centrag.extraction.pipeline import ExtractionPipeline
     from centrag.storage.document_store import DocumentStore
+    from centrag.abstractions import EmbedderProtocol, VectorStoreProtocol
+    from centrag.abstractions.embedder import SparseEmbedderProtocol
 
 logger = get_logger("ingestion.service")
 
@@ -133,12 +136,22 @@ class IngestionService:
         extraction_pipeline: ExtractionPipeline,
         tree_builder: TreeIndexProtocol,
         document_store: DocumentStore,
+        embedder_factory: Callable[[], EmbedderProtocol] | None = None,
+        vectorstore_factory: Callable[[], VectorStoreProtocol] | None = None,
+        sparse_embedder_factory: Callable[[], SparseEmbedderProtocol] | None = None,
+        graph_store_factory: Callable[[], GraphStoreProtocol] | None = None,
         cleaner: DocumentCleaner | None = None,
+        collection_name: str = "centrag",
     ) -> None:
         self._pipeline = extraction_pipeline
         self._tree_builder = tree_builder
         self._store = document_store
+        self._embedder_factory = embedder_factory
+        self._vectorstore_factory = vectorstore_factory
+        self._sparse_embedder_factory = sparse_embedder_factory
+        self._graph_store_factory = graph_store_factory
         self._cleaner = cleaner or DocumentCleaner(DocumentCleanerConfig())
+        self._collection_name = collection_name
 
     async def ingest(
         self,
@@ -150,22 +163,11 @@ class IngestionService:
         user_metadata: dict[str, Any] | None = None,
     ) -> IngestionResult:
         """
-        Ingest a document: parse → clean → index (tree + future: vectors).
-
-        Day 1: Synchronous. Blocks until PageIndex tree is built.
-        Day 2: Async variant adds background worker with polling.
-
-        Args:
-            file_bytes: Raw file content.
-            filename: Original filename.
-            team_id: Owning team (for DocumentStore scoping).
-            content_type: MIME type. Auto-detected from filename if None.
-            namespace: Logical grouping (e.g. "finance-reports").
-            user_metadata: Optional user-supplied key-value pairs.
-
-        Returns:
-            IngestionResult with status and path availability.
+        Ingest a document: parse → clean → index (tree + vectors + graph).
         """
+        from centrag.config import get_settings
+        settings = get_settings()
+
         resolved_ct = _resolve_content_type(content_type, filename)
         mime_type = content_type or resolved_ct.value
 
@@ -275,11 +277,100 @@ class IngestionService:
                 error=tree_error,
             )
 
-        # ── Step 5: VECTOR PATH — Chunk + Embed (Day 3) ────────────
-        # TODO Day 3: chunk via ChunkerProtocol, embed via EmbedderProtocol,
-        #             upsert to Qdrant via VectorStoreProtocol
+        # ── Step 5: RELATIONAL PATH — Graph Extraction (Phase 4) ──
+        if settings.enable_graph_extraction and self._graph_store_factory:
+            try:
+                graph_store = self._graph_store_factory()
+                triplets_raw = extraction_result.metadata.get("graph_triplets", [])
+                
+                if triplets_raw:
+                    from centrag.abstractions.graph_store import Relation
+                    triplets = [Relation(**t) for t in triplets_raw]
+                    await graph_store.add_triplets(team_id, namespace, triplets)
+                    logger.info("graph_indexing_complete", doc_id=doc_id, count=len(triplets))
+            except Exception as e:
+                logger.error("graph_indexing_failed", doc_id=doc_id, error=str(e))
+
+        # ── Step 6: VECTOR PATH — Chunk + Embed (Day 3 + Phase 4) ──
         vectors_available = False
         chunk_count = 0
+
+        if self._embedder_factory and self._vectorstore_factory:
+            try:
+                embedder = self._embedder_factory()
+                vectorstore = self._vectorstore_factory()
+                sparse_embedder = self._sparse_embedder_factory() if self._sparse_embedder_factory else None
+
+                # Chunks are already generated in Step 1 by Pipeline
+                chunks = extraction_result.chunks
+                chunk_count = len(chunks)
+
+                # Multivector / Multiple Embeddings indexing (Phase 4)
+                if settings.enable_multivector_extraction:
+                    logger.info("multivector_embedding_started", doc_id=doc_id, count=chunk_count)
+                    all_vectors = []
+                    for chunk in chunks:
+                        # Extract facets from metadata (added by Pipeline)
+                        summary = chunk.metadata.get("facet_summary", "")
+                        keywords = chunk.metadata.get("facet_keywords", "")
+                        
+                        # Generate vectors for each facet
+                        vec_map = {
+                            "default": (await embedder.embed_documents([chunk.content]))[0],
+                            "summary": (await embedder.embed_documents([summary]))[0] if summary else None,
+                            "keywords": (await embedder.embed_documents([keywords]))[0] if keywords else None,
+                        }
+                        # Clean out None values
+                        all_vectors.append({k: v for k, v in vec_map.items() if v is not None})
+                    embeddings = all_vectors
+                else:
+                    # Standard Single-Vector Path
+                    if settings.enable_late_chunking and hasattr(embedder, "embed_with_late_chunking"):
+                        boundaries = [(c.metadata.get("start_idx", 0), c.metadata.get("end_idx", 0)) for c in chunks]
+                        embeddings = await embedder.embed_with_late_chunking(cleaned_text, boundaries)
+                    else:
+                        embeddings = await embedder.embed_documents([c.content for c in chunks])
+
+                # 2. Sparse Embed (Hybrid path)
+                sparse_vectors = None
+                if sparse_embedder:
+                    sparse_vectors = [await sparse_embedder.embed_sparse(c.content) for c in chunks]
+
+                # 3. Payload preparation
+                ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
+                payloads = []
+                for i, chunk in enumerate(chunks):
+                    # Combine chunk metadata with team/doc context
+                    payload = chunk.to_dict()
+                    payload.update(
+                        {
+                            "team_id": team_id,
+                            "document_id": doc_id,
+                            "doc_id": doc_id,  # redundancy for different retriever versions
+                            "namespace": namespace,
+                            "filename": filename,
+                        }
+                    )
+                    payloads.append(payload)
+
+                # 4. Storage (DocumentStore for Shadow Retrieval)
+                await self._store.store_chunks(team_id, doc_id, [c.to_dict() for c in chunks])
+
+                # 5. Indexing (VectorStore for Search)
+                await vectorstore.upsert_batch(
+                    collection=self._collection_name,
+                    ids=ids,
+                    vectors=embeddings,
+                    payloads=payloads,
+                    sparse_vectors=sparse_vectors,
+                )
+
+                vectors_available = True
+                logger.info("vector_indexing_complete", doc_id=doc_id, chunks=chunk_count)
+
+            except Exception as e:
+                logger.error("vector_indexing_failed", doc_id=doc_id, error=str(e))
+                # We don't fail the whole job if only vector path fails but tree succeeds
 
         # ── Step 6: Update metadata ────────────────────────────────
         status = "ready" if tree_available else ("partial" if not tree_error else "failed")

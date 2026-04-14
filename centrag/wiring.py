@@ -68,8 +68,12 @@ from centrag.retrieval.hybrid import HybridRetriever
 from centrag.retrieval.pageindex_retriever import PageIndexRetriever
 from centrag.retrieval.query_router import QueryRouter
 
-# --- Shared infrastructure ---
+# --- SHARED: Dual-path routing & PHASE 4 ---
 from centrag.storage.document_store import DocumentStore
+from centrag.implementations.qdrant_graph_store import QdrantGraphStore
+from centrag.retrieval.graph_retriever import GraphRetriever
+from centrag.retrieval.multivector_retriever import MultivectorRetriever
+from centrag.retrieval.cag_manager import CAGManager
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -261,7 +265,22 @@ def build_retrieval_engine(
 
     generator = TwoPassGenerator(llm=None, cache=cache)  # LLM injected lazily by engine
 
-    # --- Build the engine ---
+    # --- PHASE 4: Relational, Facet, & CAG paths ---
+    # QdrantGraphStore needs the shared store and embedder
+    engine_embedder = embedder_factory()
+    engine_vectorstore = vectorstore_factory()
+    
+    graph_store = QdrantGraphStore(
+        vector_store=engine_vectorstore,
+        embedder=engine_embedder,
+        collection_name=f"{settings.qdrant_collection}_graph"
+    )
+    graph_retriever = GraphRetriever(graph_store=graph_store, document_store=document_store)
+    
+    multivector_retriever = MultivectorRetriever(vectorstore=engine_vectorstore, embedder=engine_embedder)
+    cag_manager = CAGManager(document_store=document_store)
+
+    # Re-build the engine with FULL Phase 4 stack
     engine = RetrievalEngine(
         embedder_factory=embedder_factory,
         vectorstore_factory=vectorstore_factory,
@@ -278,9 +297,14 @@ def build_retrieval_engine(
         document_store=document_store,
         query_router=query_router,
         hybrid_retriever=hybrid_retriever,
+        # Phase 4 injection
+        graph_retriever=graph_retriever,
+        multivector_retriever=multivector_retriever,
+        cag_manager=cag_manager,
         query_transformer=query_transformer,
         sparse_embedder_factory=lambda: BM25SparseEmbedder() if settings.enable_vector else None,
-        generator=generator,  # TWO-PASS GENERATOR
+        generator=generator,
+        collection_name=settings.qdrant_collection,
     )
 
     # Wire LLM into PageIndex retriever (same lazy instance)
@@ -301,6 +325,8 @@ def build_retrieval_engine(
         hybrid_retriever="HybridRetriever(k=60)",
         input_rails=len(guardrail_engine.input_rails),
         output_rails=len(guardrail_engine.output_rails),
+        graph_rag_enabled=settings.enable_graph_retrieval,
+        multivector_enabled=settings.enable_multivector_retrieval,
     )
 
     return engine
@@ -334,30 +360,48 @@ def build_ingestion_service(
     try:
         from centrag.extraction.parsers.text import (
             HTMLParser,
-            MarkdownParser,
             PlainTextParser,
         )
 
         registry.register(PlainTextParser())
-        registry.register(MarkdownParser())
         registry.register(HTMLParser())
     except ImportError:
         logger.warning("text_parsers_unavailable")
 
     # --- High-Fidelity Extraction (LlamaParse) ---
-    try:
-        from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
+    if settings.llama_cloud_api_key:
+        try:
+            from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
+    
+            llamaparse = LlamaParseExtractor(api_key=settings.llama_cloud_api_key)
+            registry.register(llamaparse)
+            logger.info("llamaparse_wired")
+        except (ImportError, ValueError) as e:
+            logger.warning("llamaparse_unavailable", error=str(e))
+    else:
+        logger.info("llamaparse_skipped_missing_key")
 
-        llamaparse = LlamaParseExtractor(api_key=settings.llama_cloud_api_key)
-        registry.register(llamaparse)
-        logger.info("llamaparse_wired")
-    except (ImportError, ValueError) as e:
-        logger.warning("llamaparse_unavailable", error=str(e))
+    # --- Layout-Aware Extraction (Docling) ---
+    try:
+        from centrag.extraction.parsers.docling_parser import DoclingParser
+
+        docling = DoclingParser(settings=settings)
+        registry.register(docling)
+        logger.info("docling_wired")
+    except ImportError:
+        logger.warning("docling_unavailable")
 
     # --- Extraction Pipeline with LLM support (Anthropic 2024 Contextual Retrieval) ---
+    default_strategy = ChunkingStrategy.RECURSIVE
+    if settings.enable_hierarchical_retrieval:
+        default_strategy = ChunkingStrategy.HIERARCHICAL
+
     pipeline = ExtractionPipeline(
         parser_registry=registry,
-        default_chunking=ChunkingConfig(enable_contextual_retrieval=settings.enable_contextual_retrieval),
+        default_chunking=ChunkingConfig(
+            strategy=default_strategy,
+            enable_contextual_retrieval=settings.enable_contextual_retrieval,
+        ),
         llm_factory=llm_factory,
     )
 
@@ -379,11 +423,23 @@ def build_ingestion_service(
     # --- Cleaner ---
     cleaner = DocumentCleaner(DocumentCleanerConfig())
 
+    # --- VECTOR path components ---
+    embedder_factory, vectorstore_factory, emb_name, vs_name = _build_vector_components(settings)
+
     service = IngestionService(
         extraction_pipeline=pipeline,
         tree_builder=tree_builder,
         document_store=document_store,
+        embedder_factory=embedder_factory,
+        vectorstore_factory=vectorstore_factory,
+        sparse_embedder_factory=lambda: BM25SparseEmbedder() if settings.enable_vector else None,
+        graph_store_factory=lambda: QdrantGraphStore(
+            vector_store=vectorstore_factory(),
+            embedder=embedder_factory(),
+            collection_name=f"{settings.qdrant_collection}_graph"
+        ),
         cleaner=cleaner,
+        collection_name=settings.qdrant_collection,
     )
 
     logger.info(

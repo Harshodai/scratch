@@ -20,6 +20,7 @@ Required: pip install openai
 from __future__ import annotations
 
 from typing import Any
+from centrag.extraction.embedder_utils import LateChunkingSimulator
 
 from centrag.utils.logger import get_logger
 
@@ -176,12 +177,11 @@ class OpenAIEmbedder:
         """
         Late Chunking: embed chunks with full-document context.
 
-        OpenAI doesn't natively support late chunking.
-        We batch-embed the chunks independently using embed_documents().
-        For true late chunking, use a model that supports it (e.g., Jina).
+        Uses the LateChunkingSimulator to approximate contextual
+        pooling for OpenAI models by using semantic sliding windows.
         """
-        chunks = [full_text[start:end] for start, end in chunk_boundaries]
-        return await self.embed_documents(chunks)
+        simulator = LateChunkingSimulator(self)
+        return await simulator.simulate_late_chunking(full_text, chunk_boundaries)
 
     @property
     def dimension(self) -> int:

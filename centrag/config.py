@@ -130,6 +130,14 @@ class Settings(BaseSettings):
     # Advancements
     enable_contextual_retrieval: bool = False  # Pre-computation summary (Anthropic 2024)
     enable_contextual_compression: bool = False  # Retrieval-time LLM refinement
+    enable_late_chunking: bool = False  # Global switch for context-aware embeddings
+    enable_hierarchical_retrieval: bool = False  # Switch for Multi-level expansion
+
+    # Phase 4 Advanced Patterns
+    enable_graph_extraction: bool = False  # LLM-based entity/relation extraction
+    enable_graph_retrieval: bool = False  # Relational path via SQLite Graph Store
+    enable_multivector_extraction: bool = False  # Summary/Keyword embedding generation
+    enable_multivector_retrieval: bool = False  # Fusion search across named vectors
 
     # Provider selection: "noop", "bedrock", "openai"
     embedder_provider: str = "noop"

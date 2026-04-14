@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from typing import Any
 
@@ -77,6 +79,13 @@ class CentragLogger:
 
     def debug(self, event: str, **kwargs: Any) -> None:
         self._logger.debug(event, **kwargs)
+
+    def bind(self, **kwargs: Any) -> CentragLogger:
+        """Bind additional context to the logger.
+        
+        Returns a new CentragLogger instance with the context applied.
+        """
+        return CentragLogger(self._logger.bind(**kwargs))
 
 
 def get_logger(name: str | None = None) -> CentragLogger:

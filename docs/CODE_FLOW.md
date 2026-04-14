@@ -60,6 +60,7 @@ create_app()                                          # centrag/app.py:159
 │
 ├── settings = get_settings()                         # centrag/config.py → Settings (Pydantic)
 │   ├── Reads CENTRAG_* env vars + .env file
+│   ├── PHASE 4 FLAGS: enable_graph_extraction, enable_multivector_retrieval, enable_cag
 │   └── FAIL-FAST: Rejects non-production infra URLs (localhost) in PRODUCTION mode
 │
 ├── app = FastAPI(title="CentRAG", lifespan=lifespan) # app.py:168
@@ -151,6 +152,12 @@ def build_retrieval_engine(settings, redis_client, document_store) -> RetrievalE
     from centrag.retrieval.generator import TwoPassGenerator
     generator = TwoPassGenerator(llm=None, cache=cache)   # centrag/retrieval/generator.py
 
+    # PHASE 4: Relational & Facet Paths
+    graph_store = SQLiteGraphStore(base_path=settings.data_dir)
+    graph_retriever = GraphRetriever(graph_store, document_store)
+    multivector_retriever = MultivectorRetriever(vectorstore, embedder)
+    cag_manager = CAGManager(document_store)
+
     return RetrievalEngine(                               # centrag/retrieval/engine.py
         embedder_factory, vs_factory,
         reranker_factory=NoOpReranker,
@@ -167,6 +174,10 @@ def build_retrieval_engine(settings, redis_client, document_store) -> RetrievalE
         document_store=document_store,
         query_router=query_router, 
         hybrid_retriever=hybrid_retriever,
+        # PHASE 4 INJECTION
+        graph_retriever=graph_retriever,
+        multivector_retriever=multivector_retriever,
+        cag_manager=cag_manager,
         query_transformer=query_transformer,
         generator=generator,                              # TWO-PASS GENERATOR
         enable_compression=settings.enable_contextual_compression, # NEW: Contextual Compression
@@ -504,6 +515,23 @@ Retrieval: PageIndexRetriever.retrieve(query, doc_id, team_id)
 ```
 Ingestion: chunk(text) → embed(chunks) → vectorstore.upsert(vectors, metadata)
 Retrieval: embed(query) → vectorstore.search(vector, top_k, sparse_vectors) → rerank(results)
+
+### Path 2.5: FACET (Multivector)
+**Files:**
+- [`centrag/retrieval/multivector_retriever.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/retrieval/multivector_retriever.py) — `MultivectorRetriever`
+
+```
+Retrieval: Query(Content, Summary, Keywords) → Parallel Namespace Queries → Weighted Fusion
+```
+
+### Path 2.6: RELATIONAL (Graph RAG)
+**Files:**
+- [`centrag/implementations/sqlite_graph_store.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/implementations/sqlite_graph_store.py) — `SQLiteGraphStore`
+- [`centrag/retrieval/graph_retriever.py`](file:///c:/Users/khars/PycharmProjects/scratch/centrag/retrieval/graph_retriever.py) — `GraphRetriever`
+
+```
+Retrieval: Extract Entities from Query → Recursive Neighbor Search (SQLite CTE) → Knowledge Context
+```
 ```
 
 ### Path 3: HYBRID (RRF Fusion)

@@ -95,10 +95,11 @@ erDiagram
         uuid id PK
         uuid document_id FK
         uuid team_id FK
+        uuid parent_id FK "Recursive link for hierarchical indexing"
         int chunk_index
         text content
         string vector_id "Qdrant point UUID"
-        jsonb metadata
+        jsonb metadata "Includes breadcrumb_path and situated_context"
         int token_count
     }
 
@@ -372,19 +373,17 @@ centrag/
 │
 ├── centrag-ingestion/             # Ingestion service
 │   ├── parsers/                   # Document parsers (pluggable)
-│   │   ├── pdf_parser.py
-│   │   ├── docx_parser.py
-│   │   ├── csv_parser.py
-│   │   └── markdown_parser.py
+│   │   ├── unstructured_parser.py  # Handles complex layouts
+│   │   ├── docling_parser.py       # DS-native parsing (table-aware)
+│   │   └── base_parser.py
 │   ├── chunkers/                  # Chunking strategies (pluggable)
-│   │   ├── semantic_chunker.py
-│   │   ├── fixed_chunker.py
-│   │   ├── parent_child_chunker.py
-│   │   └── proposition_chunker.py  # Atomic fact extraction (PoC)
+│   │   ├── layout_aware_chunker.py # Preserves tables/lists
+│   │   ├── late_chunker.py        # Embed-first, chunk-later (Phase 4)
+│   │   ├── parent_child_chunker.py # Hierarchical precision
+│   │   └── semantic_chunker.py     # LLM-driven topic breaks
 │   ├── embedders/                 # Embedding backends (pluggable)
 │   │   ├── bedrock_embedder.py
-│   │   ├── openai_embedder.py
-│   │   └── local_embedder.py
+│   │   └── cohere_embedder.py      # Supportive of Late Chunking
 │   └── worker.py                  # SQS consumer + orchestrator
 │
 ├── centrag-retrieval/             # Retrieval engine

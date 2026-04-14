@@ -24,6 +24,8 @@ from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy, Chunk
 from centrag.extraction.chunkers.fixed import FixedChunker
 from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.chunkers.recursive import RecursiveChunker
+from centrag.extraction.chunkers.hierarchical import HierarchicalSplitter
+from centrag.extraction.contextualizer import SituatedContextGenerator
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -95,6 +97,7 @@ class ExtractionPipeline:
             ChunkingStrategy.FIXED: FixedChunker(),
             ChunkingStrategy.RECURSIVE: RecursiveChunker(),
             ChunkingStrategy.PROPOSITION: PropositionChunker(),
+            ChunkingStrategy.HIERARCHICAL: HierarchicalSplitter(),
             # SEMANTIC and STRUCTURE_AWARE are added when available
         }
 
@@ -157,12 +160,22 @@ class ExtractionPipeline:
             )
             chunker = self._chunkers[ChunkingStrategy.RECURSIVE]
 
-        chunks = chunker.chunk(
-            text=document.text,
-            config=config,
-            document_title=document.title or filename,
-            section_headers=section_headers[:5],  # Limit header depth
-        )
+        if config.strategy == ChunkingStrategy.HIERARCHICAL:
+            # Hierarchical splitter has a specific split method signature
+            # We cast to any to handle the protocol variation for now
+            hier_splitter: HierarchicalSplitter = chunker  # type: ignore
+            chunks = hier_splitter.split(
+                text=document.text,
+                doc_id=document.doc_id or "",
+                document_title=document.title or filename,
+            )
+        else:
+            chunks = chunker.chunk(
+                text=document.text,
+                config=config,
+                document_title=document.title or filename,
+                section_headers=section_headers[:5],  # Limit header depth
+            )
 
         logger.info(
             "document_chunked",
@@ -174,38 +187,40 @@ class ExtractionPipeline:
 
         # --- Step 4: Contextualize Chunks (Anthropic 2024 Pattern) ---
         if config.enable_contextual_retrieval and self._llm_factory:
-            llm = self._llm_factory()
-            logger.info("contextualizing_chunks", chunk_count=len(chunks))
+            contextualizer = SituatedContextGenerator(self._llm_factory())
+            chunks = await contextualizer.contextualize(document, chunks)
 
-            # Implementation note: In production this would be parallelized
+        # --- Phase 4 pattern: Multivector Enrichment ---
+        from centrag.config import get_settings
+        settings = get_settings()
+        
+        if settings.enable_multivector_extraction and self._llm_factory:
+            from centrag.extraction.multivector import MultivectorEnricher
+            enricher = MultivectorEnricher(self._llm_factory())
+            chunks = await enricher.enrich(chunks)
+            logger.info("multivector_enrichment_completed", count=len(chunks))
+
+        # --- Phase 4 pattern: Graph Extraction ---
+        triplets = []
+        if settings.enable_graph_extraction and self._llm_factory:
+            from centrag.extraction.graph_extractor import GraphExtractor
+            extractor = GraphExtractor(self._llm_factory())
+            # For efficiency, we extract from the whole document text or a rolling window
+            # Here we extract from the full text to capture global relations
+            triplets = await extractor.extract(document.text, document.title or filename)
+            logger.info("graph_extraction_completed", triplet_count=len(triplets))
+
+        # --- NEW: Advanced Metadata Extraction (Content-Aware) ---
+        global_metadata = {}
+        if self._llm_factory:
+            from centrag.extraction.metadata_extractor import DocumentMetadataExtractor
+            meta_extractor = DocumentMetadataExtractor(self._llm_factory())
+            global_metadata = await meta_extractor.extract_metadata(document.text)
+            logger.info("global_metadata_extracted", metadata=global_metadata)
+            
+            # Propagate to all chunks for filtering
             for chunk in chunks:
-                prompt = f"""
-                <document>
-                {document.text[:10000]}  # Context window limit for summary
-                </document>
-                
-                Here is a chunk from the document:
-                <chunk>
-                {chunk.content}
-                </chunk>
-                
-                Please provide a short, one-sentence context that situates this chunk within the overall document 
-                to improve retrieval. Respond only with the one-sentence context.
-                """
-
-                try:
-                    llm_resp = await llm.generate(prompt)
-                    context_summary = llm_resp.content.strip()
-                    # Prepend context to the chunk content
-                    new_content = f"[Context: {context_summary}]\n\n{chunk.content}"
-
-                    # Update chunk content (we need to create a new instance if frozen)
-                    from dataclasses import replace
-
-                    chunks[chunks.index(chunk)] = replace(chunk, content=new_content)
-                except Exception as e:
-                    logger.warning("contextualization_failed", error=str(e))
-                    continue
+                chunk.metadata.update(global_metadata)
 
         return ExtractionResult(
             document=document,
@@ -215,6 +230,8 @@ class ExtractionPipeline:
                 "content_type": content_type.value,
                 "chunking_strategy": config.strategy.value,
                 "chunk_size": config.chunk_size,
+                "graph_triplets": [t.__dict__ for t in triplets] if triplets else [], # Temporary storage for ingestion service
+                **global_metadata,
             },
         )
 
