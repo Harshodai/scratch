@@ -148,12 +148,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bridge = engine.mcp_bridge
         
         if bridge:
-            # Register Dynamic Tool-DBs (e.g., GOS DB)
+            # 1. Load Declarative Config (Steal #2)
+            from pathlib import Path
+            config_path = Path(settings.mcp_tools_config_path)
+            if config_path.exists():
+                try:
+                    summary = bridge.load_config(config_path)
+                    logger.info("mcp_declarative_config_loaded", summary=summary)
+                except Exception as e:
+                    logger.error("mcp_config_load_failed", error=str(e))
+
+            # 2. Register Legacy Internal DBs (backward compat)
             for db_name, conn_str in settings.mcp_internal_dbs.items():
                 bridge.register_dynamic_db(db_name, conn_str)
                 logger.info("mcp_bridge_db_registered", name=db_name)
                 
-            # Launch External Servers (Managed Subprocesses)
+            # 3. Launch External Servers (Managed Subprocesses)
             for srv_name, command in settings.mcp_external_servers.items():
                 bridge.launch_external_server(srv_name, command)
                 logger.info("mcp_bridge_server_launched", name=srv_name)

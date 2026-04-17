@@ -193,13 +193,13 @@ To balance retrieval precision with inference latency:
 
 ---
 
-## 10. Model Context Protocol (MCP) Orchestration
-Decoupling tools from business logic via a Unified Bridge.
+## 10. Model Context Protocol (MCP) Pattern Stealing
+Decoupling tools from connections via a Unified Bridge, adopting patterns from `googleapis/mcp-toolbox`.
 
-- **What**: `centrag.mcp.bridge.MCPBridge` acts as a facade for:
-  - **Dynamic SQL Tools**: Uses SQLAlchemy reflection to generate read-only `SELECT` tools for any target DB.
-  - **Managed Subprocesses**: Spawns and manages the lifecycle of external MCP servers (stdio-based JSON-RPC).
-- **Decision: Automated Enterprise Integration**: If the `mcp_enterprise_server` directory is present, CentRAG auto-registers it as a managed subprocess, providing secure access to AWS (Athena/S3/DynamoDB) with built-in PII redaction.
+- **Pattern 1: Source/Tool Separation**: `SourceRegistry` manages database connections (Sources), while `ToolRegistry` manages executable actions (Tools). This allows one database connection to serve multiple toolsets (persona-based tool grouping).
+- **Pattern 2: Declarative Configuration**: Support for `mcp_tools.yaml` using a `kind/name/type` dispatch pattern. Enables DevOps to configure tools without Python changes, while CentRAG still enforces `team_id` isolation.
+- **Pattern 3: Prebuilt Config Templates**: Ships with ready-to-use YAML templates for PostgreSQL, MySQL, and SQLite, lowering the barrier for adding new data sources.
+- **Decision: Zero External Dependencies**: We stole the *design* (Source/Tool split, YAML dispatch) but did NOT integrate the Go-based `mcp-toolbox` sidecar, maintaining our in-process performance and strict multi-tenant filtering.
 
 ---
 

@@ -1,0 +1,41 @@
+# CentRAG Prebuilt Config Template: SQLite
+# STOLEN from googleapis/mcp-toolbox prebuiltconfigs/tools/sqlite.yaml
+#
+# The WHY:
+#   The Toolbox ships ready-to-use YAML files per database type.
+#   Copy this template, set environment variables, and restart.
+#
+# Usage:
+#   1. Copy to your project root as `mcp_tools.yaml`
+#   2. Set SQLITE_DATABASE env var (or edit inline)
+#   3. CentRAG will auto-discover and register all tools
+
+sources:
+  sqlite-source:
+    kind: sqlite
+    connection_string: "sqlite:///${SQLITE_DATABASE:centrag.db}"
+    read_only: true
+
+# Tools are auto-generated from schema reflection.
+# Add custom tools below if needed:
+tools:
+  list_tables:
+    kind: sql-query
+    source: sqlite-source
+    description: "List all user tables in the SQLite database."
+    statement: |
+      SELECT name, type
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%'
+      ORDER BY name;
+
+# Toolsets group tools for different agent personas.
+# Auto-generated tools follow the pattern: <source>.query_<table>
+toolsets:
+  data:
+    description: "All data access tools for SQLite"
+    tools:
+      - sqlite-source.execute_read_query
+      - sqlite-source.describe_schema
+      - list_tables

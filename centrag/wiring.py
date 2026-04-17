@@ -230,8 +230,9 @@ def build_retrieval_engine(
     cache = TieredCacheOrchestrator(tiers=cache_tiers)
 
     # --- MCP (Model Context Protocol) Bridge ---
-    mcp_bridge = MCPBridge() if settings.enable_mcp else None
-    if mcp_bridge:
+    mcp_bridge = None
+    if settings.enable_mcp:
+        mcp_bridge = MCPBridge()
         logger.info("mcp_bridge_created")
 
     # --- Evaluation & Self-Audit (Self-Evaluation) ---

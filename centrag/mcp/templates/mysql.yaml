@@ -1,0 +1,62 @@
+# CentRAG Prebuilt Config Template: MySQL
+# STOLEN from googleapis/mcp-toolbox prebuiltconfigs/tools/mysql.yaml
+#
+# Usage:
+#   1. Copy to your project root as `mcp_tools.yaml`
+#   2. Set environment variables: MYSQL_HOST, MYSQL_PORT,
+#      MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
+#   3. CentRAG auto-generates query tools for every discovered table
+
+sources:
+  mysql-source:
+    kind: mysql
+    connection_string: "mysql+pymysql://${MYSQL_USER:root}:${MYSQL_PASSWORD}@${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE}"
+    read_only: true
+
+tools:
+  list_tables:
+    kind: sql-query
+    source: mysql-source
+    description: "List all user tables in the MySQL database."
+    statement: |
+      SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_ROWS, DATA_LENGTH
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_TYPE = 'BASE TABLE'
+      ORDER BY TABLE_NAME;
+
+  list_processlist:
+    kind: sql-query
+    source: mysql-source
+    description: "Show current MySQL processes and active queries."
+    statement: |
+      SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO
+      FROM INFORMATION_SCHEMA.PROCESSLIST
+      WHERE COMMAND != 'Sleep'
+      ORDER BY TIME DESC
+      LIMIT 50;
+
+  list_index_stats:
+    kind: sql-query
+    source: mysql-source
+    description: "Index usage statistics across all tables."
+    statement: |
+      SELECT TABLE_NAME, INDEX_NAME, COLUMN_NAME, SEQ_IN_INDEX,
+             NON_UNIQUE, CARDINALITY
+      FROM INFORMATION_SCHEMA.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+      ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX;
+
+toolsets:
+  data:
+    description: "Core data access and schema inspection"
+    tools:
+      - mysql-source.execute_read_query
+      - mysql-source.describe_schema
+      - list_tables
+
+  monitor:
+    description: "MySQL monitoring tools"
+    tools:
+      - list_processlist
+      - list_index_stats

@@ -1026,7 +1026,7 @@ sequenceDiagram
 | [`implementations/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/implementations/) | Vendor Concrete Classes | `BedrockLLM`, `QdrantStore`, `OpenAIEmbedder` |
 | [`retrieval/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/retrieval/) | RAG Orchestration | `RetrievalEngine`, `TwoPassGenerator` |
 | [`guardrails/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/guardrails/) | Safety & Grounding | `PII`, `CostTracker`, `GuardrailEngine` |
-| [`mcp/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/mcp/) | MCP Integration | `MCPBridge`, `DynamicSQLMCPFactory` |
+| [`mcp/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/mcp/) | MCP Integration | `MCPBridge`, `SourceRegistry`, `ToolRegistry`, `ConfigLoader` |
 
 ---
 

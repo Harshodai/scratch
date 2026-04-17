@@ -139,10 +139,9 @@ class Settings(BaseSettings):
     enable_mcp: bool = True  # Model Context Protocol integration
 
     # MCP Integration Settings
-    # Format: {"aws": ["npx", "-y", "@modelcontextprotocol/server-aws"]}
     mcp_external_servers: dict[str, list[str]] = {}
-    # Format: {"gos": "postgresql://user:pass@host/db"}
     mcp_internal_dbs: dict[str, str] = {}
+    mcp_tools_config_path: str = "mcp_tools.yaml"
 
     # Advancements
     enable_contextual_retrieval: bool = False  # Pre-computation summary (Anthropic 2024)

@@ -1,0 +1,96 @@
+# CentRAG Prebuilt Config Template: PostgreSQL
+# STOLEN from googleapis/mcp-toolbox prebuiltconfigs/tools/postgres.yaml
+#
+# The WHY:
+#   The Toolbox's postgres template defines 24 tools across 5 toolsets
+#   (data, monitor, health, view-config, replication). We adapt this
+#   for CentRAG's auto-reflection approach where tools are generated
+#   dynamically from schema inspection.
+#
+# Usage:
+#   1. Copy to your project root as `mcp_tools.yaml`
+#   2. Set environment variables: POSTGRES_HOST, POSTGRES_PORT,
+#      POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DATABASE
+#   3. CentRAG auto-generates query tools for every discovered table
+
+sources:
+  postgresql-source:
+    kind: postgres
+    connection_string: "postgresql://${POSTGRES_USER:centrag}:${POSTGRES_PASSWORD:centrag_dev_only}@${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:centrag}"
+    schema: ${POSTGRES_SCHEMA:public}
+    read_only: true
+
+# Additional custom tools beyond auto-generated ones:
+tools:
+  list_bloated_tables:
+    kind: sql-query
+    source: postgresql-source
+    description: "Top tables by dead-tuple count (approximate bloat signal)."
+    statement: |
+      SELECT
+        schemaname AS schema_name,
+        relname AS relation_name,
+        n_live_tup AS live_tuples,
+        n_dead_tup AS dead_tuples,
+        TRUNC((n_dead_tup::NUMERIC / NULLIF(n_live_tup + n_dead_tup, 0)) * 100, 2) AS dead_pct,
+        last_vacuum, last_autovacuum
+      FROM pg_stat_user_tables
+      ORDER BY n_dead_tup DESC
+      LIMIT 50;
+
+  list_active_queries:
+    kind: sql-query
+    source: postgresql-source
+    description: "Top running queries ordered by duration."
+    statement: |
+      SELECT pid, usename, datname, application_name, state,
+             now() - query_start AS query_duration, query
+      FROM pg_stat_activity
+      WHERE state = 'active'
+      ORDER BY query_start
+      LIMIT 50;
+
+  list_locks:
+    kind: sql-query
+    source: postgresql-source
+    description: "Currently held database locks."
+    statement: |
+      SELECT
+        pg_stat_activity.pid, pg_stat_activity.usename,
+        pg_locks.locktype, pg_locks.mode, pg_locks.granted,
+        pg_stat_activity.query
+      FROM pg_locks
+      JOIN pg_stat_activity ON pg_locks.pid = pg_stat_activity.pid
+      WHERE pg_stat_activity.state = 'active'
+      ORDER BY pg_stat_activity.query_start;
+
+  get_query_plan:
+    kind: sql-query
+    source: postgresql-source
+    description: "Generate a PostgreSQL EXPLAIN plan without executing."
+    statement: "EXPLAIN (FORMAT JSON) ${query}"
+    parameters:
+      - name: query
+        type: string
+        description: "The SQL statement to explain (omit EXPLAIN keyword)."
+
+# Toolsets — adapted from Toolbox's postgres.yaml toolset structure
+# Auto-generated tools follow the pattern: <source>.query_<table>
+toolsets:
+  data:
+    description: "Core data access and schema inspection"
+    tools:
+      - postgresql-source.execute_read_query
+      - postgresql-source.describe_schema
+
+  monitor:
+    description: "Query monitoring and performance tools"
+    tools:
+      - list_active_queries
+      - get_query_plan
+      - list_locks
+
+  health:
+    description: "Database health and maintenance tools"
+    tools:
+      - list_bloated_tables
