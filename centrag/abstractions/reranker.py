@@ -4,7 +4,7 @@ Reranker abstraction — re-scores retrieved chunks for precision.
 SOLID: Single Responsibility — only reranking, nothing else.
 
 Design Pattern: STRATEGY PATTERN
-    - CohereReranker, CrossEncoderReranker, NoOpReranker
+    - CohereReranker, FlashRankReranker, CrossEncoderReranker, NoOpReranker
     - NoOpReranker is useful for testing / cost reduction on simple queries
 
 RAG Advancement: CORRECTIVE RAG (CRAG) — 2025

@@ -90,7 +90,7 @@ class TestGoldenDataset:
 
     def test_sample_dataset(self):
         ds = GoldenDataset.sample_dataset()
-        assert ds.size == 5
+        assert ds.size == 9
         assert any(c.difficulty == Difficulty.COMPLEX for c in ds.cases)
 
 

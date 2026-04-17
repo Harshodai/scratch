@@ -63,7 +63,10 @@ if TYPE_CHECKING:
         VectorStoreProtocol,
     )
     from centrag.abstractions.embedder import SparseEmbedderProtocol
+    from centrag.evaluation.failure_store import FailureStore
+    from centrag.evaluation.judges import JudgeProtocol
     from centrag.middleware import RequestContext
+    from centrag.mcp.bridge import MCPBridge
     from centrag.retrieval.generator import TwoPassGenerator
 
 logger = get_logger()
@@ -164,6 +167,9 @@ class RetrievalEngine:
         query_transformer: Any | None = None,
         # --- TWO-PASS GENERATION ---
         generator: TwoPassGenerator | None = None,
+        failure_store: FailureStore | None = None,
+        self_eval_judges: list[Any] | None = None,
+        mcp_bridge: MCPBridge | None = None,
         collection_name: str = "centrag",
     ) -> None:
         # Pattern 3: Pervasive Lazy Loading
@@ -200,7 +206,10 @@ class RetrievalEngine:
 
         self._query_transformer = query_transformer
         self._generator = generator
-        self._collection_name = collection_name
+        self._failure_store = failure_store
+        self._self_eval_judges = self_eval_judges or []
+        self._mcp_bridge = mcp_bridge
+        self._collection = collection_name
 
         self.__embedder = None
         self.__vectorstore = None
@@ -235,6 +244,11 @@ class RetrievalEngine:
         return self.__reranker
 
     @property
+    def mcp_bridge(self) -> MCPBridge | None:
+        """The Model Context Protocol bridge for tool-use."""
+        return self._mcp_bridge
+
+    @property
     def _llm(self) -> LLMProtocol:
         if not self.__llm:
             self.__llm = self._llm_factory()
@@ -261,6 +275,8 @@ class RetrievalEngine:
             )
 
             start_time = time.monotonic()
+        
+        settings = get_settings()
         log = logger.bind(
             team_id=ctx.team_id,
             request_id=ctx.request_id,
@@ -598,11 +614,29 @@ class RetrievalEngine:
             )
 
             # --- Step 10: Cache write (serialize for JSON-safe L2 storage) ---
-            await self._cache.set(
-                key=request.query,
-                value=response.to_dict(),
-                team_id=ctx.team_id,
+            if self._cache:
+                asyncio.create_task(self._cache.set(request, ctx.team_id, response))
+
+            # --- Step 11: Self-Evaluation Audit Trail (Background) ---
+            settings = get_settings()
+            # Conditional Optimization: Skip evaluation for SIMPLE queries
+            should_eval = (
+                settings.enable_self_evaluation 
+                and self._self_eval_judges 
+                and complexity.value != "simple"
             )
+
+            if should_eval:
+                log.info("self_evaluation_triggered", complexity=complexity.value)
+                asyncio.create_task(
+                    self._run_self_evaluation(
+                        query=request.query,
+                        response=response,
+                        ctx=ctx,
+                    )
+                )
+            else:
+                log.info("self_evaluation_skipped", complexity=complexity.value)
 
             return response
 
@@ -758,3 +792,71 @@ class RetrievalEngine:
         except asyncio.CancelledError:
             logger.warning("stream_aborted_by_client", request_id=ctx.request_id)
             raise
+    async def _run_self_evaluation(
+        self,
+        query: str,
+        response: RetrievalResponse,
+        ctx: RequestContext,
+    ) -> None:
+        """Background task to audit response quality.
+
+        The WHY:
+            Detects hallucinations and relevance regressions in real-time
+            without blocking the user's response. Failures are logged
+            to the FailureStore for later analysis.
+        """
+        if not self._failure_store:
+            return
+
+        settings = get_settings()
+        from centrag.evaluation.judges import JudgeResult
+        from centrag.evaluation.metrics import CaseResult
+        from centrag.evaluation.dataset import TestCase
+
+        source_texts = [s.content for s in response.sources]
+        judge_results: list[JudgeResult] = []
+
+        for judge in self._self_eval_judges:
+            try:
+                # Heuristic judges are fast and sync
+                result = judge.evaluate(
+                    query=query,
+                    generated_answer=response.answer,
+                    expected_answer="",  # Not available in production
+                    sources=source_texts,
+                )
+                judge_results.append(result)
+            except Exception as e:
+                logger.warning("self_eval_judge_failed", judge=type(judge).__name__, error=str(e))
+
+        if not judge_results:
+            return
+
+        # Calculate composite score (heuristic-only)
+        avg_score = sum(r.score for r in judge_results) / len(judge_results)
+
+        if avg_score < settings.self_eval_threshold:
+            # Create a CaseResult and log to FailureStore
+            # TestCase is dummy since we don't have expected answer
+            case = TestCase(
+                id=f"live-{ctx.request_id}",
+                query=query,
+                expected_answer="N/A (Production)",
+                difficulty="production",
+            )
+            
+            case_result = CaseResult(
+                case=case,
+                judge_results=judge_results,
+                generated_answer=response.answer,
+                retrieval_path=response.metadata.get("retrieval_source", "unknown"),
+                latency_ms=0.0, # Not strictly tracked for self-eval here
+                retrieved_doc_ids=[s.document_id for s in response.sources],
+            )
+
+            self._failure_store.add_from_result(case_result)
+            logger.info(
+                "self_eval_failure_recorded",
+                avg_score=round(avg_score, 3),
+                request_id=ctx.request_id,
+            )

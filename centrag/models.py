@@ -279,6 +279,53 @@ class Feedback(Base):
     )
 
 
+class EvaluationFailure(Base):
+    """Persisted evaluation failure case for continuous improvement.
+
+    The WHY:
+        When the RAG pipeline fails (low faithfulness, hallucination,
+        retrieval miss), we need a queryable record of WHAT failed,
+        WHY (category), and in WHICH context (path, difficulty, tags).
+        This enables:
+        - Failure pattern analysis across teams
+        - Regression testing (did the fix resolve known failures?)
+        - Golden dataset expansion (failures → new test cases)
+        - Retraining signals (retrieval misses → fine-tune reranker)
+
+    Complements the FailureStore (evaluation/failure_store.py) which
+    provides the in-memory + JSON-file persistence for CI/CD.
+    """
+
+    __tablename__ = "evaluation_failures"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+    )
+    case_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # retrieval_miss | hallucination | off_topic | low_coverage | latency_exceeded | guardrail_block
+    composite_score: Mapped[float] = mapped_column(Float, nullable=False)
+    retrieval_path: Mapped[str] = mapped_column(String(50), nullable=False)  # pageindex | vector | hybrid
+    latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    judge_scores: Mapped[dict] = mapped_column(JSONB, default=dict)
+    retrieval_metrics: Mapped[dict] = mapped_column(JSONB, default=dict)
+    difficulty: Mapped[str] = mapped_column(String(50), default="moderate")
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_eval_failures_team_id", "team_id"),
+        Index("ix_eval_failures_category", "category"),
+        Index("ix_eval_failures_created", "created_at"),
+    )
+
+
 # =============================================================================
 # RLS POLICIES — Applied after table creation via Alembic migration
 # =============================================================================
@@ -310,5 +357,10 @@ CREATE POLICY team_isolation_audit ON audit_logs
     USING (team_id = current_setting('app.current_team_id')::uuid);
 
 CREATE POLICY team_isolation_feedback ON feedback
+    USING (team_id = current_setting('app.current_team_id')::uuid);
+
+ALTER TABLE evaluation_failures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE evaluation_failures FORCE ROW LEVEL SECURITY;
+CREATE POLICY team_isolation_eval_failures ON evaluation_failures
     USING (team_id = current_setting('app.current_team_id')::uuid);
 """

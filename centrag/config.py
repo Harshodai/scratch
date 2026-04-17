@@ -53,6 +53,17 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    @model_validator(mode="after")
+    def auto_register_enterprise_mcp(self) -> Self:
+        """If mcp_enterprise_server exists, register it as an external server."""
+        import os
+        enterprise_path = os.path.join(os.getcwd(), "mcp_enterprise_server")
+        if os.path.isdir(enterprise_path) and self.enable_mcp:
+            if "enterprise" not in self.mcp_external_servers:
+                # We use 'py' to ensure we use the same environment's launcher
+                self.mcp_external_servers["enterprise"] = ["py", "-m", "mcp_enterprise_server.server", "--transport", "stdio"]
+        return self
+
     # --- Application ---
     env: str = "development"
     debug: bool = False
@@ -127,11 +138,23 @@ class Settings(BaseSettings):
     enable_vector: bool = True  # VECTOR path (requires Qdrant)
     enable_mcp: bool = True  # Model Context Protocol integration
 
+    # MCP Integration Settings
+    # Format: {"aws": ["npx", "-y", "@modelcontextprotocol/server-aws"]}
+    mcp_external_servers: dict[str, list[str]] = {}
+    # Format: {"gos": "postgresql://user:pass@host/db"}
+    mcp_internal_dbs: dict[str, str] = {}
+
     # Advancements
     enable_contextual_retrieval: bool = False  # Pre-computation summary (Anthropic 2024)
     enable_contextual_compression: bool = False  # Retrieval-time LLM refinement
     enable_late_chunking: bool = False  # Global switch for context-aware embeddings
     enable_hierarchical_retrieval: bool = False  # Switch for Multi-level expansion
+    enable_semantic_cache: bool = True  # L3 Semantic Lookup (GPTCache Style)
+    semantic_cache_threshold: float = 0.95  # Similarity cutoff
+
+    # Evaluation & Assurance
+    enable_self_evaluation: bool = True  # Run heuristic judges in background on every query
+    self_eval_threshold: float = 0.7  # Composite score below which a failure is recorded
 
     # Phase 4 Advanced Patterns
     enable_graph_extraction: bool = False  # LLM-based entity/relation extraction

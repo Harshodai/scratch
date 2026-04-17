@@ -105,9 +105,13 @@ CentRAG is built for multi-tenant enterprise environments.
 ---
 
 ## 6. Observability & Performance
-- **Tiered Caching**: L1 (In-memory) → L2 (Redis) ensure sub-100ms response times for repeat queries.
+- **Tiered Caching**:
+    - **L1 (In-Memory)**: 5-minute TTL for active bursts.
+    - **L2 (Redis)**: Cross-instance scalar hits.
+    - **L3 (Semantic)**: `centrag/cache/semantic.py` implementing the **SSDataManager** pattern.
+- **SSDataManager Pattern**: Decouples Vector Similarity from Scalar Storage. Qdrant performs the similarity search (threshold 0.95), but the full Answer payload is stored in the `scalar_store` (Redis) to minimize the Qdrant memory footprint and allow metadata-rich caching.
 - **LLM Gateway**: Implements **Circuit Breakers** and **Budget Gating** to prevent runaway cloud costs and cascade failures during provider outages.
-- **AgentsView Integration**: Real-time export of session metadata to the AgentsView dashboard for deep-trace analysis of agent reasoning.
+- **CentragLogger**: Standardized `structlog`-based logging with `ELK/Datadog` ready JSON outputs and colored console outputs for local dev.
 
 ---
 
@@ -177,7 +181,29 @@ CentRAG uses **Reciprocal Rank Fusion (RRF)** to merge results from the Semantic
 
 ---
 
-## 9. Specialized Agent Ecosystem (Quality Gates)
+## 9. Cross-Encoder Reranking Cascade
+To balance retrieval precision with inference latency:
+
+- **What**: A fall-through selection hierarchy:
+  1. **Cohere (API)**: Best-in-class, used if API key is present.
+  2. **BGE-v2 (Local)**: SOTA local transformer, used if GPU/CPU allows.
+  3. **FlashRank (Local)**: Optimized CPU-only cross-encoder for low latency.
+  4. **NoOp (Heuristic)**: Simple similarity-scoring fallback.
+- **Decision**: CentRAG uses **Sigmoid Normalization** on raw cross-encoder logits to ensure score consistency across different providers, enabling predictable CRAG (Corrective RAG) thresholds.
+
+---
+
+## 10. Model Context Protocol (MCP) Orchestration
+Decoupling tools from business logic via a Unified Bridge.
+
+- **What**: `centrag.mcp.bridge.MCPBridge` acts as a facade for:
+  - **Dynamic SQL Tools**: Uses SQLAlchemy reflection to generate read-only `SELECT` tools for any target DB.
+  - **Managed Subprocesses**: Spawns and manages the lifecycle of external MCP servers (stdio-based JSON-RPC).
+- **Decision: Automated Enterprise Integration**: If the `mcp_enterprise_server` directory is present, CentRAG auto-registers it as a managed subprocess, providing secure access to AWS (Athena/S3/DynamoDB) with built-in PII redaction.
+
+---
+
+## 11. Specialized Agent Ecosystem (Quality Gates)
 To ensure production hardening, CentRAG implements a suite of custom agent skills in `.gemini/skills/`:
 
 | Skill | Role |
@@ -190,7 +216,7 @@ To ensure production hardening, CentRAG implements a suite of custom agent skill
 
 ---
 
-## 10. Final Gap Assessment (Verified 2026-04-12)
+## 12. Final Gap Assessment (Verified 2026-04-17)
 | Feature | Status | Implementation Reference |
 |---------|--------|--------------------------|
 | Multi-Tenant Isolation | ✅ 100% | `QdrantVectorStore.search` payload filtering |
@@ -198,3 +224,5 @@ To ensure production hardening, CentRAG implements a suite of custom agent skill
 | Contextual Retrieval | ✅ 100% | `ExtractionPipeline.process` situational Pass |
 | Hybrid RRF Fusion | ✅ 100% | `HybridRetriever.fuse` |
 | Agentic Quality Gates | ✅ 100% | `.gemini/skills/` custom skill suite |
+| Tiered L3 Semantic Cache | ✅ 100% | `SemanticCache` (SSDataManager) |
+| Unified MCP Orchestration| ✅ 100% | `MCPBridge` (Subprocess + Dynamic SQL) |

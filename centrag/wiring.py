@@ -37,13 +37,17 @@ from typing import TYPE_CHECKING
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy
 from centrag.cache.l1_memory import L1InMemoryCache
 from centrag.cache.l2_redis import L2RedisCache
+from centrag.cache.semantic import SemanticCache
 from centrag.cache.orchestrator import TieredCacheOrchestrator
+from centrag.mcp.bridge import MCPBridge
+from centrag.retrieval.engine import RetrievalEngine
 from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.parsers.base import ParserRegistry
 from centrag.extraction.pipeline import ExtractionPipeline
 from centrag.guardrails.engine import GuardrailEngine, GuardrailsConfig
 from centrag.implementations.bedrock_embedder import BedrockEmbedder
 from centrag.implementations.bm25_sparse_embedder import BM25SparseEmbedder
+from centrag.implementations.cohere_reranker import CohereReranker
 from centrag.implementations.hyde_transformer import HyDETransformer
 from centrag.implementations.llm_query_extractor import LLMQueryExtractor
 
@@ -74,6 +78,8 @@ from centrag.implementations.qdrant_graph_store import QdrantGraphStore
 from centrag.retrieval.graph_retriever import GraphRetriever
 from centrag.retrieval.multivector_retriever import MultivectorRetriever
 from centrag.retrieval.cag_manager import CAGManager
+from centrag.evaluation.failure_store import FailureStore
+from centrag.evaluation.judges import FaithfulnessJudge, RelevanceJudge, CoverageJudge
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -194,13 +200,47 @@ def build_retrieval_engine(
     if document_store is None:
         document_store = DocumentStore(base_path=settings.data_dir)
 
-    # --- Cache: L1 (in-process) → L2 (Redis) ---
-    cache = TieredCacheOrchestrator(
-        tiers=[
-            L1InMemoryCache(maxsize=512, ttl_seconds=300),
-            L2RedisCache(redis_client=redis_client),
-        ]
-    )
+    # --- VECTOR path: conditional Qdrant ---
+    embedder_factory, vectorstore_factory, emb_name, vs_name = _build_vector_components(settings)
+    engine_embedder = embedder_factory()
+    engine_vectorstore = vectorstore_factory()
+
+    # --- Cache: L1 (in-process) → L2 (Redis Exact) → L3 (Semantic, gated) ---
+    l2_cache = L2RedisCache(redis_client=redis_client)
+
+    cache_tiers: list = [
+        L1InMemoryCache(maxsize=512, ttl_seconds=300),
+        l2_cache,
+    ]
+
+    # Gate L3 Semantic Cache on config flag (CENTRAG_ENABLE_SEMANTIC_CACHE)
+    if getattr(settings, "enable_semantic_cache", True):
+        semantic_cache = SemanticCache(
+            vector_store=engine_vectorstore,
+            scalar_store=l2_cache,
+            embedder=engine_embedder,
+            collection_name=f"{settings.qdrant_collection}_semantic_cache",
+            similarity_threshold=getattr(settings, "semantic_cache_threshold", 0.95),
+        )
+        cache_tiers.append(semantic_cache)
+        logger.info("semantic_cache_enabled", threshold=getattr(settings, "semantic_cache_threshold", 0.95))
+    else:
+        logger.info("semantic_cache_disabled")
+
+    cache = TieredCacheOrchestrator(tiers=cache_tiers)
+
+    # --- MCP (Model Context Protocol) Bridge ---
+    mcp_bridge = MCPBridge() if settings.enable_mcp else None
+    if mcp_bridge:
+        logger.info("mcp_bridge_created")
+
+    # --- Evaluation & Self-Audit (Self-Evaluation) ---
+    failure_store = FailureStore(output_dir="evaluate/reports")
+    self_eval_judges = [
+        FaithfulnessJudge(),
+        RelevanceJudge(),
+        CoverageJudge(),
+    ]
 
     # --- Memory: In-memory for dev ---
     memory = InMemoryStore()
@@ -267,8 +307,7 @@ def build_retrieval_engine(
 
     # --- PHASE 4: Relational, Facet, & CAG paths ---
     # QdrantGraphStore needs the shared store and embedder
-    engine_embedder = embedder_factory()
-    engine_vectorstore = vectorstore_factory()
+    # (Reusing engine_embedder and engine_vectorstore built above)
     
     graph_store = QdrantGraphStore(
         vector_store=engine_vectorstore,
@@ -280,11 +319,34 @@ def build_retrieval_engine(
     multivector_retriever = MultivectorRetriever(vectorstore=engine_vectorstore, embedder=engine_embedder)
     cag_manager = CAGManager(document_store=document_store)
 
+    # --- RERANKER: Cohere (production) → FlashRank (local) → NoOp (dev) ---
+    if settings.cohere_api_key:
+        reranker_factory = lambda: CohereReranker(api_key=settings.cohere_api_key)  # noqa: E731
+        reranker_name = "CohereReranker"
+    else:
+        try:
+            import FlagEmbedding as _fe  # noqa: F401
+
+            from centrag.implementations.bge_reranker import BGEV2Reranker
+            reranker_factory = BGEV2Reranker
+            reranker_name = "BGEV2Reranker"
+            logger.info("using_bge_v2_reranker")
+        except ImportError:
+            try:
+                import flashrank as _fr  # noqa: F401
+
+                from centrag.implementations.flashrank_reranker import FlashRankReranker
+                reranker_factory = FlashRankReranker  # type: ignore[assignment]
+                reranker_name = "FlashRankReranker"
+            except ImportError:
+                reranker_factory = NoOpReranker  # type: ignore[assignment]
+                reranker_name = "NoOpReranker"
+
     # Re-build the engine with FULL Phase 4 stack
     engine = RetrievalEngine(
         embedder_factory=embedder_factory,
         vectorstore_factory=vectorstore_factory,
-        reranker_factory=NoOpReranker,
+        reranker_factory=reranker_factory,
         llm_factory=llm_factory,
         cache=cache,
         memory=memory,
@@ -304,6 +366,9 @@ def build_retrieval_engine(
         query_transformer=query_transformer,
         sparse_embedder_factory=lambda: BM25SparseEmbedder() if settings.enable_vector else None,
         generator=generator,
+        failure_store=failure_store,
+        self_eval_judges=self_eval_judges,
+        mcp_bridge=mcp_bridge,
         collection_name=settings.qdrant_collection,
     )
 
@@ -315,12 +380,12 @@ def build_retrieval_engine(
         "retrieval_engine_built",
         embedder=emb_name,
         vectorstore=vs_name,
-        reranker="NoOpReranker",
+        reranker=reranker_name,
         vector_enabled=settings.enable_vector,
         pageindex_enabled=settings.enable_pageindex,
         pageindex_model=settings.pageindex_model if settings.enable_pageindex else "disabled",
         llm="NoOpLLM",
-        cache_tiers=2,
+        cache_tiers=3,
         query_router="QueryRouter",
         hybrid_retriever="HybridRetriever(k=60)",
         input_rails=len(guardrail_engine.input_rails),

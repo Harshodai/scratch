@@ -26,6 +26,9 @@
 | **Two-Pass Reasoning** | `generator.py` | Grounding: Facts → Synthesis |
 | **Relational Graph** | `retrieval/graph_retriever.py` | Multi-hoprelational traversal (SQLite CTE) |
 | **Facet Weighting** | `retrieval/multivector_retriever.py` | Balanced score fusion across named vectors |
+| **Adapter** | `evaluation/deepeval_judges.py` | Wraps DeepEval metrics behind JudgeProtocol |
+| **Repository** | `evaluation/failure_store.py` | Abstracts persistence of failure case data |
+| **Facade** | `evaluation/runner.py` | Entry point for the full eval cycle (Engine+Judges+Metrics) |
 
 ---
 
@@ -46,19 +49,23 @@ Use these `make` commands to verify your changes before completion.
 
 ### Configuration
 All settings use Pydantic with `CENTRAG_` prefix:
+- `CENTRAG_ENABLE_SEMANTIC_CACHE`: GPTCache-style L3 semantic caching.
+- `CENTRAG_SEMANTIC_CACHE_THRESHOLD`: Similarity threshold (default 0.95).
 - `CENTRAG_ENABLE_CONTEXTUAL_RETRIEVAL`: 2024 Anthropic situated context.
 - `CENTRAG_ENABLE_CONTEXTUAL_COMPRESSION`: Dynamic LLM-based context refinement.
 - `CENTRAG_ENABLE_GRAPH_EXTRACTION`: LLM-based triplet extraction.
 - `CENTRAG_ENABLE_GRAPH_RETRIEVAL`: Relational path activation.
 - `CENTRAG_ENABLE_MULTIVECTOR_RETRIEVAL`: Facet-based score fusion path.
 - `CENTRAG_ENABLE_CAG`: Static enterprise context injection.
+- `CENTRAG_COHERE_API_KEY`: Cohere API key. When set, activates CohereReranker (cross-encoder) instead of NoOpReranker.
+  - **Selection cascade**: Cohere key → `CohereReranker` | FlagEmbedding installed → `BGEV2Reranker` | flashrank installed → `FlashRankReranker` | fallback → `NoOpReranker`
 - `CENTRAG_LOG_RENDERER`: 'json' for production (ELK/Datadog), 'console' for human-readable dev logs.
 
 ### Rules of Engagement
 - **No Side Effects**: Never add logic to `models.py`.
 - **Isolation**: Every cache and retrieval operation must be team-scoped. `search()` must ALWAYS include a mandatory `team_id` filter (enforced at runtime).
 - **Hardening**: Use deep immutability (frozen dataclasses + MappingProxyType) for core document abstractions.
-- **Logging**: Use `structlog`, never `print()` or stdlib `logging`.
+- **Logging**: Use `centrag.utils.logger.get_logger("module_name")`, never `print()`, raw `structlog.get_logger()`, or stdlib `logging`.
 - **Documentation**: Use "The WHY" docstring style (Google Style + architectural rationale).
 - **Maintenance**: Follow the **Post-Change Ritual** in [MAINTENANCE.md](docs/MAINTENANCE.md).
 
@@ -70,4 +77,5 @@ For deep dives into specific subsystems, read the following:
 - **[CODE_FLOW.md](docs/CODE_FLOW.md)**: Class maps, method signatures, and pipeline traces.
 - **[ARCHITECTURE_HLD.md](docs/ARCHITECTURE_HLD.md)**: System topology and deployment model.
 - **[ENGINEERING_DECISIONS.md](docs/ENGINEERING_DECISIONS.md)**: Rationale for RAG strategies and function payloads.
+- **[EVALUATION_GUIDE.md](docs/EVALUATION_GUIDE.md)**: Retrieval metrics, DeepEval judges, failure store, and hybrid retrieval.
 - **[MAINTENANCE.md](docs/MAINTENANCE.md)**: Mandatory post-change rituals and documentation rules.

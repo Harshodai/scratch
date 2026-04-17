@@ -94,8 +94,17 @@ lifespan(app: FastAPI)
 │   └── app.state.document_store
 │
 ├── build_retrieval_engine(settings, redis, store)    # centrag/wiring.py:115
+│   ├── mcp_bridge = MCPBridge()                      # centrag/mcp/bridge.py
+│   ├── semantic_cache = SemanticCache()              # centrag/cache/semantic.py
 │   └── Returns: RetrievalEngine                      # centrag/retrieval/engine.py
 │   └── app.state.retrieval_engine
+│
+├── _init_qdrant(...) -> app.state.qdrant
+│
+├── RETRIEVAL ENGINE READY:
+│   ├── mcp_bridge.register_dynamic_db(settings.mcp_internal_dbs)
+│   ├── mcp_bridge.launch_external_server(settings.mcp_external_servers)
+│   └── shutdown_registry.register(mcp_bridge.shutdown)
 │
 ├── build_ingestion_service(settings, store)          # centrag/wiring.py:209
 │   └── Returns: IngestionService                     # centrag/ingestion/service.py
@@ -579,7 +588,7 @@ fuse(pageindex_results, vector_results) → merged_results
 | `EmbedderProtocol` | [embedder.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/embedder.py) | `embed_query()`, `embed_documents()` | `NoOpEmbedder`, `BedrockEmbedder`, `OpenAIEmbedder` |
 | `VectorStoreProtocol` | [vectorstore.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/vectorstore.py) | `upsert()`, `search()`, `delete()` | `NoOpVectorStore`, `QdrantVectorStore` |
 | `LLMProtocol` | [llm.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/llm.py) | `generate()`, `classify_complexity()` | `NoOpLLM`, wrapped by `LLMGateway` |
-| `RerankerProtocol` | [reranker.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/reranker.py) | `rerank()` | `NoOpReranker` |
+| `RerankerProtocol` | [reranker.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/reranker.py) | `rerank()` | `NoOpReranker`, `FlashRankReranker`, `CohereReranker` |
 | `ChunkerProtocol` | [chunker.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/chunker.py) | `chunk()`, `chunk_boundaries()` | `RecursiveChunker`, `PropositionChunker`, `ParentChildChunker`, `FixedChunker`, `SemanticChunker` |
 | `CacheProtocol` | [cache.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/cache.py) | `get()`, `set()`, `invalidate()` | `L1InMemoryCache`, `L2RedisCache`, `TieredCacheOrchestrator` |
 | `SparseEmbedderProtocol` | [embedder.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/abstractions/embedder.py) | `embed_query()`, `embed_documents()` | `BM25SparseEmbedder` (i18n aware via NLTK/langdetect) |
@@ -628,6 +637,16 @@ fuse(pageindex_results, vector_results) → merged_results
 | Cloud | AWS Secret Key | `[REDACTED_AWS_SECRET_KEY]` | line 58 |
 | Cloud | AWS ARN | `[REDACTED_AWS_ARN]` | line 61 |
 | Cloud | API Key (generic) | `[REDACTED_API_KEY_GENERIC]` | line 64 |
+
+### Step 1: Cache Check (L1 → L2 → L3)
+**File:** `centrag/abstractions/cache.py`
+
+Before doing any work, we check the multi-level cache:
+1. **L1 (In-Memory)**: Sub-ms check for exact hits in high-frequency queries.
+2. **L2 (Redis)**: Cross-instance hit check.
+3. **L3 (Semantic)**: `centrag/cache/semantic.py` → Uses Qdrant vector similarity (threshold 0.95) to find *semantically* equivalent answers.
+
+If any tier hits, we return immediately.
 
 ### ChunkResult Schema
 
@@ -686,9 +705,14 @@ Retrieval flow:
 | File | Class | Purpose |
 |------|-------|---------|
 | [dataset.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/dataset.py) | `GoldenDataset`, `TestCase` | Test cases with expected answers |
-| [judges.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/judges.py) | `FaithfulnessJudge`, `RelevanceJudge`, `CoverageJudge` | Score answers 0.0–1.0 |
-| [metrics.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/metrics.py) | `EvaluationMetrics`, `EvaluationReport` | Aggregate per-judge, per-difficulty |
+| [judges.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/judges.py) | `FaithfulnessJudge`, `RelevanceJudge`, `CoverageJudge` | Heuristic scoring 0.0–1.0 |
+| [deepeval_judges.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/deepeval_judges.py) | `DeepEvalFaithfulnessJudge`, `DeepEvalRelevanceJudge`, `DeepEvalHallucinationJudge`, `DeepEvalContextualPrecisionJudge`, `DeepEvalContextualRecallJudge` | LLM-backed scoring via DeepEval |
+| [metrics.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/metrics.py) | `EvaluationMetrics`, `EvaluationReport`, IR metrics (`precision_at_k`, `recall_at_k`, `mean_reciprocal_rank`, `ndcg_at_k`, `f1_at_k`) | Aggregate per-judge, per-difficulty, retrieval quality |
+| [failure_store.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/failure_store.py) | `FailureStore`, `FailureCase`, `FailureCategory` | Persist and categorize evaluation failures |
+| [runner.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/runner.py) | `EvaluationRunner` | Orchestrates: engine → judges → metrics → failures |
 | [comparator.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/evaluation/comparator.py) | `PathComparator` | Side-by-side: pageindex vs vector |
+
+**API Route:** `POST /v1/evaluate` — triggers evaluation via HTTP ([evaluate.py](file:///c:/Users/khars/PycharmProjects/scratch/centrag/routes/evaluate.py)).
 
 **CI Automation:** `ai-evals.yml` automatically triggers this test suite on any pull requests modifying chunking or retrieval pipelines.
 
@@ -729,6 +753,8 @@ centrag/
 │   ├── noop_vectorstore.py           NoOpVectorStore (in-memory dict)
 │   ├── noop_llm.py                   NoOpLLM (template-based)
 │   ├── noop_reranker.py              NoOpReranker (keyword overlap)
+│   ├── flashrank_reranker.py         FlashRankReranker (TinyBERT, local, free)
+│   ├── cohere_reranker.py            CohereReranker (Rerank v3.5, cross-encoder)
 │   ├── qdrant_vectorstore.py         QdrantVectorStore (production, lazy-load)
 │   ├── pageindex_tree.py             PageIndexTreeBuilder (VectifyAI)
 │   ├── llm_gateway.py               LLMGateway (circuit breaker + cost)
@@ -748,7 +774,8 @@ centrag/
 │       ├── semantic.py               SemanticChunker (embedding boundaries)
 │       ├── structure_aware.py        StructureAwareChunker (heading-aware)
 │       ├── parent_child.py           ParentChildChunker (512t parent + 128t child)
-│       └── proposition.py            PropositionChunker (atomic fact extraction)
+│       ├── proposition.py            PropositionChunker (atomic fact extraction)
+│       └── late_chunking.py          LateChunker (contextual chunk embedding)
 │
 ├── ingestion/                      Document upload pipeline
 │   ├── service.py                    IngestionService.ingest() → IngestionResult
@@ -782,12 +809,16 @@ centrag/
 ├── evaluation/                     Quality measurement
 │   ├── dataset.py                    GoldenDataset, TestCase
 │   ├── judges.py                     FaithfulnessJudge, RelevanceJudge, CoverageJudge
-│   ├── metrics.py                    EvaluationMetrics, EvaluationReport
+│   ├── deepeval_judges.py            5 DeepEval LLM-backed judges (Adapter pattern)
+│   ├── metrics.py                    EvaluationMetrics, EvaluationReport, IR metrics
+│   ├── failure_store.py              FailureStore, FailureCase, FailureCategory
+│   ├── runner.py                     EvaluationRunner (orchestrator)
 │   └── comparator.py                 PathComparator
 │
 ├── routes/                         FastAPI endpoints
 │   ├── documents.py                  POST/GET /v1/documents
 │   ├── retrieve.py                   POST /v1/retrieve
+│   ├── evaluate.py                   POST /v1/evaluate
 │   └── health.py                     GET /health
 │
 ├── observability/                  Metrics + tracing
@@ -886,8 +917,9 @@ sequenceDiagram
     participant A as app.py (FastAPI)
     participant M as Middleware (Auth/RateLimit)
     participant E as RetrievalEngine (engine.py)
+    participant B as MCPBridge (bridge.py)
     participant G as GuardrailEngine (engine.py)
-    participant C as Cache (TieredCache)
+    participant C as Cache (TieredCache/Semantic)
     participant V as VectorStore (Qdrant)
     participant L as LLMGateway (llm_gateway.py)
 
@@ -896,13 +928,16 @@ sequenceDiagram
     M->>E: retrieve(request, ctx)
     
     activate E
+    E->>B: get_tools() (External/Dynamic)
+    B-->>E: ToolDefinitionList
+    
     E->>G: input_rail.validate(query)
     G-->>E: sanitized_query (or Violation)
     
     E->>E: classify_complexity(query)
     
     E->>C: get(query, team_id)
-    alt Cache Hit
+    alt Cache Hit (L1/L2/L3)
         C-->>E: RetrievalResponse
         E-->>U: Final Answer (Cached)
     else Cache Miss
@@ -991,6 +1026,7 @@ sequenceDiagram
 | [`implementations/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/implementations/) | Vendor Concrete Classes | `BedrockLLM`, `QdrantStore`, `OpenAIEmbedder` |
 | [`retrieval/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/retrieval/) | RAG Orchestration | `RetrievalEngine`, `TwoPassGenerator` |
 | [`guardrails/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/guardrails/) | Safety & Grounding | `PII`, `CostTracker`, `GuardrailEngine` |
+| [`mcp/`](file:///C:/Users/khars/PycharmProjects/scratch/centrag/mcp/) | MCP Integration | `MCPBridge`, `DynamicSQLMCPFactory` |
 
 ---
 

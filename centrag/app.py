@@ -144,11 +144,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # --- Initialize MCP (Model Context Protocol) ---
     if settings.enable_mcp:
+        engine = app.state.retrieval_engine
+        bridge = engine.mcp_bridge
+        
+        if bridge:
+            # Register Dynamic Tool-DBs (e.g., GOS DB)
+            for db_name, conn_str in settings.mcp_internal_dbs.items():
+                bridge.register_dynamic_db(db_name, conn_str)
+                logger.info("mcp_bridge_db_registered", name=db_name)
+                
+            # Launch External Servers (Managed Subprocesses)
+            for srv_name, command in settings.mcp_external_servers.items():
+                bridge.launch_external_server(srv_name, command)
+                logger.info("mcp_bridge_server_launched", name=srv_name)
+                
+            # Ensure cleanup on shutdown
+            shutdown_registry.register(bridge.shutdown, priority=1)
+            
         try:
             from mcp.server.fastmcp import FastMCP
-
             from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
-
+            
             mcp_server = FastMCP("CentRAG-Retriever")
             register_rag_tools(mcp_server, app.state.retrieval_engine)
             app.state.mcp_server = mcp_server
@@ -213,6 +229,7 @@ def create_app() -> FastAPI:
     from centrag.routes.health import router as health_router
     from centrag.routes.retrieve import router as retrieve_router
     from centrag.routes.documents import router as documents_router
+    from centrag.routes.evaluate import router as evaluate_router
 
     app.include_router(health_router)
     app.include_router(feedback_router, prefix="/v1")
@@ -222,5 +239,8 @@ def create_app() -> FastAPI:
         app.include_router(documents_router, prefix="/v1")
     if settings.enable_retrieval_routes:
         app.include_router(retrieve_router, prefix="/v1")
+
+    # Evaluation — always available (gated by auth, not feature flag)
+    app.include_router(evaluate_router, prefix="/v1")
 
     return app

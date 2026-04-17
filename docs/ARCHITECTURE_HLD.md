@@ -56,7 +56,7 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 3 | **Defence in Depth** | API key → rate limit → namespace guard → SQL validation → PII redaction → audit log |
 | 4 | **Event-Driven Ingestion** | Upload → SQS → async worker (never blocks the API thread) |
 | 5 | **Hybrid RAG** | Dense + Sparse + KG retrieval, fused by a cross-encoder re-ranker. Augmented by **Layout-Aware Ingestion** for structural fidelity. |
-| 6 | **Tiered Caching** | L1 (in-process) → L2 (exact) → L3 (semantic) → L4 (full RAG). |
+| 6 | **Tiered Caching** | L1 (in-process) → L2 (exact) → L3 (semantic) → L4 (full RAG). Semantic cache saves LLM costs by identifying query similarity. |
 | 7 | **Observability First** | Every chain has a `trace_id` linking query → retrieval → generation → response. |
 | 8 | **Policy-as-Code** | Access policies, retention rules, PII patterns defined as versioned code. |
 | 9 | **Graceful Shutdown** | All services implement tiered shutdown: drain requests → flush analytics → close connections → force-exit with failsafe timeout. Prevents data loss on SIGTERM/SIGINT during rolling deployments. |
@@ -64,7 +64,7 @@ Teams in the organization waste **2–4 weeks** each setting up their own RAG pi
 | 11 | **Performance Budgets** | Every async operation has a latency budget. Operations exceeding their budget are automatically logged as `slow_operation_detected` warnings with stack traces, enabling zero-effort bottleneck discovery. |
 | 12 | **LLM-Driven Agent Selection** | The LLM itself decides the orchestration strategy at query time. Based on query complexity, it routes to: cache-only (SIMPLE), standard RAG (STANDARD), multi-step retrieval (COMPLEX), or full multi-agent orchestration (RESEARCH). This replaces static routing with dynamic, context-aware selection. See `CROSS_REPO_ANALYSIS.md §3`. |
 | 13 | **Context Engineering** | Aggressive context management: isolated sub-agent contexts, mid-session summarization, memory compression, and progressive skill loading. Inspired by DeerFlow's context summarization and AgentScope's memory compression. See `LEARNING_AND_ROADMAP.md Phase 2`. |
-| 14 | **MCP-First Integration** | All external data source connections (Oracle GOS DB, DynamoDB, Confluence, etc.) are exposed as MCP servers using stdio transport. The retrieval engine acts as an MCP client. This standardizes all integrations via the Model Context Protocol. See `MCP_DEPLOYMENT_GUIDE.md`. |
+| 14 | **MCP-First Integration** | All external data source connections are exposed as MCP servers. Supports **Dynamic SQL MCP** (on-the-fly reflection) for un-onboarded DBs. Supports local subprocess life-cycle management for external tools. |
 | 15 | **Deep Immutability** | Core document abstractions enforce strict read-only state at the application level to prevent accidental mutation during retrieval/ingestion flows (e.g., `ExtractedDocument`). |
 | 16 | **Fail-Fast Configuration** | Boot-time validators reject non-production infrastructure URLs (e.g., `localhost`) when the system is in `production` mode, preventing silent configuration leaks. |
 | 17 | **Layout-Aware Ingestion** | We prioritize **Structure over Size**. Documents are parsed into structural elements (tables, lists, headers) before chunking to preserve semantic relationships. See `RETRIEVAL_STRATEGY_DEEP_DIVE.md`. |
@@ -299,6 +299,14 @@ Internet
 ---
 
 ## 7. MCP Integration Architecture
+
+### 7.0 Dynamic MCP & Process Management (New)
+
+CentRAG now supports **Dynamic MCP Integration**, allowing on-the-fly tool generation and external process lifecycle management:
+
+- **DynamicSQLMCPFactory**: Uses SQLAlchemy reflection to automatically scan database schemas (Connection String + Schema + Tables) and generate a FastMCP server with read-only tools.
+- **MCPProcessManager**: Robust service that launches and monitors external MCP servers (AWS, Jira, Confluence) as local subprocesses, ensuring complete cleanup on system shutdown.
+- **MCPBridge**: The unified registry that coordinates internal dynamic servers and external client sessions.
 
 ### 7.1 Reusable Connector Pattern
 
