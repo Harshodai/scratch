@@ -95,11 +95,14 @@ class HierarchicalSplitter:
                 )
             else:
                 # Step 2: Split Section Body into Blocks
+                running_offset = 0
                 blocks = self._simple_split(part, self._block_size)
                 for b_idx, block_text in enumerate(blocks):
                     block_id = str(uuid.uuid4())
-                    block_start = char_offset + part.find(block_text)
+                    found_index = part.find(block_text, running_offset)
+                    block_start = char_offset + found_index
                     block_end = block_start + len(block_text)
+                    running_offset = found_index + len(block_text)
 
                     all_chunks.append(
                         ChunkResult(

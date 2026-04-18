@@ -32,8 +32,11 @@ def generate_emr_tools(source: AWSSource) -> list[MCPTool]:
     async def list_emr_clusters(**kwargs) -> str:
         def _list():
             client = _get_client()
-            response = client.list_clusters(ClusterStates=["STARTING", "BOOTSTRAPPING", "RUNNING", "WAITING"])
-            return response.get("Clusters", [])
+            paginator = client.get_paginator("list_clusters")
+            clusters = []
+            for page in paginator.paginate(ClusterStates=["STARTING", "BOOTSTRAPPING", "RUNNING", "WAITING"]):
+                clusters.extend(page.get("Clusters", []))
+            return clusters
 
         try:
             clusters = await asyncio.to_thread(_list)

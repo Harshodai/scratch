@@ -80,7 +80,10 @@ def _resolve_dict(data: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(value, dict):
             resolved[key] = _resolve_dict(value)
         elif isinstance(value, list):
-            resolved[key] = [_resolve_env_vars(v) if isinstance(v, str) else v for v in value]
+            resolved[key] = [
+                _resolve_env_vars(v) if isinstance(v, str) else _resolve_dict(v) if isinstance(v, dict) else v
+                for v in value
+            ]
         else:
             resolved[key] = value
     return resolved

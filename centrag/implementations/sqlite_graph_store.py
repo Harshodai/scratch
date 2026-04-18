@@ -161,7 +161,7 @@ class SQLiteGraphStore:
                     subject=row["subject"],
                     predicate=row["predicate"],
                     object=row["object"],
-                    metadata=json.loads(row.get("metadata", "{}")) if "metadata" in row else {},
+                    metadata=json.loads(row["metadata"]) if "metadata" in row and row["metadata"] is not None else {},
                 )
                 for row in rows
             ]
@@ -177,9 +177,10 @@ class SQLiteGraphStore:
         cursor = conn.cursor()
 
         try:
+            escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             cursor.execute(
-                "SELECT * FROM entities WHERE team_id = ? AND namespace = ? AND name LIKE ? LIMIT ?",
-                (team_id, namespace, f"%{query}%", limit),
+                "SELECT * FROM entities WHERE team_id = ? AND namespace = ? AND name LIKE ? ESCAPE '\\' LIMIT ?",
+                (team_id, namespace, f"%{escaped_query}%", limit),
             )
             rows = cursor.fetchall()
 
@@ -187,7 +188,7 @@ class SQLiteGraphStore:
                 Entity(
                     name=row["name"],
                     entity_type=row["entity_type"],
-                    metadata=json.loads(row.get("metadata", "{}")) if row["metadata"] else {},
+                    metadata=json.loads(row["metadata"]) if "metadata" in row and row["metadata"] else {},
                 )
                 for row in rows
             ]

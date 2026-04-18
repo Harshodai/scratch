@@ -24,13 +24,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from centrag.abstractions.embedder import EmbedderProtocol
 from centrag.extraction.embedder_utils import LateChunkingSimulator
 from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.embedder.bedrock")
 
 
-class BedrockEmbedder:
+class BedrockEmbedder(EmbedderProtocol):
     """Production-grade embedding engine utilizing Amazon Titan Models.
 
     The WHY:

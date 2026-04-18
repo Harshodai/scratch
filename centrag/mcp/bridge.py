@@ -23,6 +23,8 @@ SOLID: SRP — only coordinates MCP servers, no business logic.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 from centrag.mcp.config_loader import (
@@ -65,9 +67,6 @@ class MCPBridge:
         self.source_registry = SourceRegistry()
         self.tool_registry = ToolRegistry(self.source_registry)
         self.process_manager = MCPProcessManager()
-
-        import contextlib
-        import asyncio
 
         self._exit_stack = contextlib.AsyncExitStack()
         self._external_sessions: dict[str, Any] = {}
@@ -255,8 +254,6 @@ class MCPBridge:
         for t in tools_response.tools:
 
             async def proxy_handler(tool_target=t.name, session_ref=session, **kwargs) -> str:
-                import asyncio
-                
                 # Lazy initialization logic
                 if self._external_semaphore is None:
                     self._external_semaphore = asyncio.Semaphore(10)
@@ -271,7 +268,7 @@ class MCPBridge:
                         if hasattr(res, "content") and res.content:
                             return "\n".join(b.text for b in res.content if hasattr(b, "text"))
                         return str(res)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.error("mcp_bridge_proxy_timeout", tool=tool_target)
                         return f"Error: MCP Server proxy call to '{tool_target}' timed out after 60 seconds."
 

@@ -215,12 +215,14 @@ class IngestionWorker:
         )
 
         # Update document status to "pending"
-        with contextlib.suppress(Exception):
+        try:
             await self._store.update_meta(
                 team_id=team_id,
                 doc_id=job_id,
                 status="pending",
             )
+        except Exception as e:
+            logger.exception("update_meta_failed", error=str(e), job_id=job_id, team_id=team_id)
 
         return job
 
@@ -318,13 +320,15 @@ class IngestionWorker:
                     job.error_message = f"Failed after {job.max_retries} retries: {error_msg}"
 
                     # Update document store
-                    with contextlib.suppress(Exception):
+                    try:
                         await self._store.update_meta(
                             team_id=job.team_id,
                             doc_id=job.job_id,
                             status="failed",
                             error_message=job.error_message,
                         )
+                    except Exception as e:
+                        logger.exception("update_meta_failed", error=str(e), job_id=job.job_id, team_id=job.team_id)
 
                     logger.error(
                         "job_failed_permanently",

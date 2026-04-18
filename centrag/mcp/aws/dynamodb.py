@@ -20,8 +20,11 @@ logger = get_logger("mcp.aws.dynamodb")
 def cap_result_size(data: str, max_bytes: int = 5 * 1024 * 1024) -> str:
     encoded = data.encode("utf-8")
     if len(encoded) > max_bytes:
-        truncated = encoded[:max_bytes].decode("utf-8", errors="ignore")
-        return truncated + f"\n\n[TRUNCATED: Result exceeded {max_bytes} bytes]"
+        marker = f"\n\n[TRUNCATED: Result exceeded {max_bytes} bytes]"
+        marker_bytes = marker.encode("utf-8")
+        cutoff = max(0, max_bytes - len(marker_bytes))
+        truncated = encoded[:cutoff].decode("utf-8", errors="ignore")
+        return truncated + marker
     return data
 
 
@@ -37,7 +40,8 @@ def generate_dynamodb_tools(source: AWSSource) -> list[MCPTool]:
 
     def _validate_table(table: str) -> None:
         if allowed_tables and table not in allowed_tables:
-            raise PermissionError(f"Table '{table}' is not in the allowed list: {allowed_tables}")
+            logger.warning("unauthorized_table_access", table=table, allowed_tables=allowed_tables)
+            raise PermissionError("Access to requested table is not permitted")
 
     def _get_client():
         return source.cred_manager.get_client("dynamodb")
@@ -58,7 +62,8 @@ def generate_dynamodb_tools(source: AWSSource) -> list[MCPTool]:
             tables = await asyncio.to_thread(_list)
             return json.dumps({"status": "success", "tables": tables}, default=str, indent=2)
         except Exception as e:
-            return f"DynamoDB Error: {e}"
+            logger.exception("DynamoDB error during list_dynamodb_tables", error=str(e))
+            return "Failed to query DynamoDB"
 
     async def query_dynamodb(**kwargs) -> str:
         table_name = kwargs.get("table_name", "")
@@ -80,13 +85,14 @@ def generate_dynamodb_tools(source: AWSSource) -> list[MCPTool]:
                 items = [
                     {k: deserializer.deserialize(v) for k, v in item.items()} for item in response.get("Items", [])
                 ]
-                return items
+                return {"items": items, "last_evaluated_key": response.get("LastEvaluatedKey")}
 
-            items = await asyncio.to_thread(_query)
-            result = json.dumps({"status": "success", "items": items}, default=str, indent=2)
+            query_result = await asyncio.to_thread(_query)
+            result = json.dumps({"status": "success", "items": query_result["items"], "last_evaluated_key": query_result.get("last_evaluated_key")}, default=str, indent=2)
             return cap_result_size(redact_pii(result, enable=True))
         except Exception as e:
-            return f"DynamoDB Error: {e}"
+            logger.exception("DynamoDB error during query_dynamodb", error=str(e))
+            return "Failed to query DynamoDB"
 
     async def describe_dynamodb_table(**kwargs) -> str:
         table_name = kwargs.get("table_name", "")
@@ -122,7 +128,8 @@ def generate_dynamodb_tools(source: AWSSource) -> list[MCPTool]:
             result = json.dumps({"status": "success", "table": table_info}, default=str, indent=2)
             return cap_result_size(redact_pii(result, enable=True))
         except Exception as e:
-            return f"DynamoDB Error: {e}"
+            logger.exception("DynamoDB error during describe_dynamodb_table", error=str(e))
+            return "Failed to query DynamoDB"
 
     target_source_name = source.name
     ans = ToolAnnotations.read_only()

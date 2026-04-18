@@ -40,7 +40,9 @@ def validate_sql_query(query: str, blocked_keywords: list[str], read_only: bool)
 
     # Read-only mode: only SELECT and WITH (CTEs) are permitted
     if read_only:
-        first_keyword = upper_query.lstrip("( ").split()[0] if upper_query.strip() else ""
+        stripped_after_lstrip = upper_query.lstrip("( ")
+        split_result = stripped_after_lstrip.split()
+        first_keyword = split_result[0] if split_result else ""
         if first_keyword not in ("SELECT", "WITH", "EXPLAIN", "DESCRIBE", "SHOW"):
             raise QueryValidationError(f"Read-only mode only allows SELECT/WITH/EXPLAIN queries. Got: {first_keyword}")
 
@@ -241,6 +243,8 @@ def generate_athena_tools(source: AWSSource) -> list[MCPTool]:
 
     async def get_athena_workgroup(**kwargs) -> str:
         name = kwargs.get("name")
+        if not name:
+            raise ValueError("work group name is required")
 
         def _get():
             return _get_client().get_work_group(WorkGroup=name)

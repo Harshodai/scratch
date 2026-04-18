@@ -269,12 +269,13 @@ class DocumentCleaner:
 
             # Skip very short lines that look like headers/footers
             _is_short = len(stripped) < self._config.min_line_length_for_content
-            _looks_like_content = stripped and stripped[-1] not in ".!?:;,"
+            # Check if it has terminal punctuation (likely real content)
+            _looks_like_content = stripped and stripped[-1] in ".!?:;,"
             _is_page_artifact = stripped.isdigit() or stripped.lower() in (
                 "confidential", "draft", "internal"
             )
             
-            if _is_short and _looks_like_content and _is_page_artifact:
+            if (_is_short or _is_page_artifact) and not _looks_like_content:
                 stripped_count += 1
                 continue
 

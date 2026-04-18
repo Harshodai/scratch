@@ -55,7 +55,10 @@ class DocumentMetadataExtractor:
 
         try:
             response = await self._llm.generate(
-                prompt=f"Document Intro:\n{doc_head}", context=[], system_prompt=system_prompt, temperature=0.0
+                prompt=f"Document Intro:\n{doc_head}",
+                context=[],
+                system_prompt=system_prompt,
+                temperature=0.0,
             )
 
             import re
