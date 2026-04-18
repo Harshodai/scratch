@@ -20,7 +20,6 @@ The WHY:
 from __future__ import annotations
 
 import asyncio
-from typing import List
 
 from centrag.abstractions.reranker import RerankResult
 from centrag.utils.logger import get_logger
@@ -78,9 +77,9 @@ class BGEV2Reranker:
     async def rerank(
         self,
         query: str,
-        documents: List[str],
+        documents: list[str],
         top_n: int = 5,
-    ) -> List[RerankResult]:
+    ) -> list[RerankResult]:
         """Rerank documents using BGE-v2-M3 cross-encoder.
 
         The WHY:
@@ -101,10 +100,7 @@ class BGEV2Reranker:
 
         if not query.strip():
             logger.warning("bge_rerank_empty_query")
-            return [
-                RerankResult(index=i, text=doc, relevance_score=0.0)
-                for i, doc in enumerate(documents[:top_n])
-            ]
+            return [RerankResult(index=i, text=doc, relevance_score=0.0) for i, doc in enumerate(documents[:top_n])]
 
         try:
             model = await asyncio.to_thread(self._load_model)
@@ -116,9 +112,7 @@ class BGEV2Reranker:
             # mapping scores to [0, 1] range. Without this, scores can be
             # negative or >1, breaking RerankResult.is_confident checks.
             # Verified via: FlagEmbedding docs + HuggingFace model card.
-            scores = await asyncio.to_thread(
-                model.compute_score, pairs, normalize=True
-            )
+            scores = await asyncio.to_thread(model.compute_score, pairs, normalize=True)
 
             # If only one document, scores is a float, not a list
             if isinstance(scores, (int, float)):
@@ -126,7 +120,7 @@ class BGEV2Reranker:
 
             # Combine with indices and sort by descending score
             results = []
-            for i, (doc, score) in enumerate(zip(documents, scores)):
+            for i, (doc, score) in enumerate(zip(documents, scores, strict=False)):
                 results.append(
                     RerankResult(
                         index=i,
@@ -171,7 +165,4 @@ class BGEV2Reranker:
             Bi-Encoder ordering is "good enough" as a fallback.
         """
         logger.warning("bge_rerank_fallback", message="Using original order")
-        return [
-            RerankResult(index=i, text=doc, relevance_score=0.5)
-            for i, doc in enumerate(documents[:top_n])
-        ]
+        return [RerankResult(index=i, text=doc, relevance_score=0.5) for i, doc in enumerate(documents[:top_n])]

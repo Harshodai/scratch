@@ -28,7 +28,7 @@ class RetrievalRequest:
     mode: str = "rag"  # "auto" | "pageindex" | "vector" | "hybrid" | "rag"
     target_doc_id: str = ""  # Scope to a specific document (enables PageIndex)
     metadata_filter: dict[str, Any] | None = None  # Explicit filters (e.g., {"post_year": "2024"})
-    
+
     # Internal: Populated by RetrievalEngine after intent transformation
     query_intent: Any | None = None  # Use Any to avoid circular import if needed
 

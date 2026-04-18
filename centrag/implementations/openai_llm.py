@@ -91,7 +91,7 @@ class OpenAILLM:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        
+
         context_str = "\n\n".join(context)
         user_content = f"Context:\n{context_str}\n\nQuestion: {prompt}"
         messages.append({"role": "user", "content": user_content})
@@ -145,7 +145,7 @@ class OpenAILLM:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        
+
         context_str = "\n\n".join(context)
         user_content = f"Context:\n{context_str}\n\nQuestion: {prompt}"
         messages.append({"role": "user", "content": user_content})

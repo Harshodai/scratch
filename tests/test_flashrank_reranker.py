@@ -9,9 +9,7 @@ without requiring flashrank to be installed.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from centrag.abstractions.reranker import RerankResult
 
@@ -28,24 +26,18 @@ class TestFlashRankReranker:
 
     def test_empty_documents_returns_empty(self):
         reranker = self._make_reranker()
-        result = asyncio.get_event_loop().run_until_complete(
-            reranker.rerank("What is X?", [], top_n=5)
-        )
+        result = asyncio.get_event_loop().run_until_complete(reranker.rerank("What is X?", [], top_n=5))
         assert result == []
 
     def test_empty_query_returns_zero_scores(self):
         reranker = self._make_reranker()
-        result = asyncio.get_event_loop().run_until_complete(
-            reranker.rerank("", ["doc1", "doc2"], top_n=2)
-        )
+        result = asyncio.get_event_loop().run_until_complete(reranker.rerank("", ["doc1", "doc2"], top_n=2))
         assert len(result) == 2
         assert all(r.relevance_score == 0.0 for r in result)
 
     def test_whitespace_query_returns_zero_scores(self):
         reranker = self._make_reranker()
-        result = asyncio.get_event_loop().run_until_complete(
-            reranker.rerank("   ", ["doc1", "doc2"], top_n=2)
-        )
+        result = asyncio.get_event_loop().run_until_complete(reranker.rerank("   ", ["doc1", "doc2"], top_n=2))
         assert all(r.relevance_score == 0.0 for r in result)
 
     def test_rerank_with_mocked_ranker(self):
@@ -61,9 +53,7 @@ class TestFlashRankReranker:
         reranker._ranker = mock_ranker
 
         documents = ["Less relevant", "Relevant document"]
-        result = asyncio.get_event_loop().run_until_complete(
-            reranker.rerank("What is relevant?", documents, top_n=2)
-        )
+        result = asyncio.get_event_loop().run_until_complete(reranker.rerank("What is relevant?", documents, top_n=2))
 
         assert len(result) == 2
         assert isinstance(result[0], RerankResult)
@@ -118,9 +108,7 @@ class TestFlashRankReranker:
         ]
         reranker._ranker = mock_ranker
 
-        asyncio.get_event_loop().run_until_complete(
-            reranker.rerank("test query", ["doc A"], top_n=1)
-        )
+        asyncio.get_event_loop().run_until_complete(reranker.rerank("test query", ["doc A"], top_n=1))
 
         # Verify the passage format passed to ranker.rerank()
         call_kwargs = mock_ranker.rerank.call_args

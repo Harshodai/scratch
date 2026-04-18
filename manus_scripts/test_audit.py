@@ -1,11 +1,11 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import faiss
 import pandas as pd
 from langchain_community.vectorstores import FAISS
-from langchain_core.documents import Document
 from main_final import compress_data, decompress_data, serialize_faiss_index
 
 

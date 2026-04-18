@@ -84,7 +84,7 @@ class ValidatedResponse:
     flags: list[str] = field(default_factory=list)
 
 
-class GuardrailViolation(Exception):
+class GuardrailViolation(Exception):  # noqa: N818
     """Exception raised when a guardrail blocks a request or response.
 
     The WHY:

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -40,12 +41,12 @@ from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from centrag.abstractions.tree_index import TreeIndexProtocol
-    from centrag.abstractions.extractor import ExtractedDocument
-    from centrag.extraction.pipeline import ExtractionPipeline
-    from centrag.storage.document_store import DocumentStore
     from centrag.abstractions import EmbedderProtocol, VectorStoreProtocol
     from centrag.abstractions.embedder import SparseEmbedderProtocol
+    from centrag.abstractions.graph_store import GraphStoreProtocol
+    from centrag.abstractions.tree_index import TreeIndexProtocol
+    from centrag.extraction.pipeline import ExtractionPipeline
+    from centrag.storage.document_store import DocumentStore
 
 logger = get_logger("ingestion.service")
 
@@ -166,6 +167,7 @@ class IngestionService:
         Ingest a document: parse → clean → index (tree + vectors + graph).
         """
         from centrag.config import get_settings
+
         settings = get_settings()
 
         resolved_ct = _resolve_content_type(content_type, filename)
@@ -282,9 +284,10 @@ class IngestionService:
             try:
                 graph_store = self._graph_store_factory()
                 triplets_raw = extraction_result.metadata.get("graph_triplets", [])
-                
+
                 if triplets_raw:
                     from centrag.abstractions.graph_store import Relation
+
                     triplets = [Relation(**t) for t in triplets_raw]
                     await graph_store.add_triplets(team_id, namespace, triplets)
                     logger.info("graph_indexing_complete", doc_id=doc_id, count=len(triplets))
@@ -313,7 +316,7 @@ class IngestionService:
                         # Extract facets from metadata (added by Pipeline)
                         summary = chunk.metadata.get("facet_summary", "")
                         keywords = chunk.metadata.get("facet_keywords", "")
-                        
+
                         # Generate vectors for each facet
                         vec_map = {
                             "default": (await embedder.embed_documents([chunk.content]))[0],
@@ -339,7 +342,7 @@ class IngestionService:
                 # 3. Payload preparation
                 ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
                 payloads = []
-                for i, chunk in enumerate(chunks):
+                for _i, chunk in enumerate(chunks):
                     # Combine chunk metadata with team/doc context
                     payload = chunk.to_dict()
                     payload.update(

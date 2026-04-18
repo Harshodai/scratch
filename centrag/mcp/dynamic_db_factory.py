@@ -24,20 +24,32 @@ Pattern: FACTORY + ADAPTER
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
-from sqlalchemy import create_engine, inspect, text
 from mcp.server.fastmcp import FastMCP
+from sqlalchemy import create_engine, inspect, text
 
 from centrag.utils.logger import get_logger
 
 logger = get_logger("mcp.dynamic_factory")
 
 # Blocked SQL keywords for read-only enforcement
-_BLOCKED_KEYWORDS = frozenset({
-    "DROP", "DELETE", "UPDATE", "INSERT", "TRUNCATE", "ALTER",
-    "CREATE", "GRANT", "REVOKE", "EXEC", "EXECUTE", "MERGE",
-})
+_BLOCKED_KEYWORDS = frozenset(
+    {
+        "DROP",
+        "DELETE",
+        "UPDATE",
+        "INSERT",
+        "TRUNCATE",
+        "ALTER",
+        "CREATE",
+        "GRANT",
+        "REVOKE",
+        "EXEC",
+        "EXECUTE",
+        "MERGE",
+    }
+)
 
 
 def _is_read_only(query: str) -> bool:
@@ -70,8 +82,8 @@ class DynamicSQLMCPFactory:
     def create_server(
         name: str,
         connection_string: str,
-        schema: Optional[str] = None,
-        tables: Optional[list[str]] = None,
+        schema: str | None = None,
+        tables: list[str] | None = None,
     ) -> FastMCP:
         """
         Create a FastMCP server with tools dynamically generated from DB schema.
@@ -126,7 +138,7 @@ class DynamicSQLMCPFactory:
                     result = conn.execute(text(query))
                     if result.returns_rows:
                         columns = list(result.keys())
-                        rows = [dict(zip(columns, row)) for row in result.fetchmany(limit)]
+                        rows = [dict(zip(columns, row, strict=False)) for row in result.fetchmany(limit)]
                         return json.dumps(
                             {
                                 "columns": columns,
@@ -147,9 +159,9 @@ class DynamicSQLMCPFactory:
 
             @mcp.tool(name=f"query_{table_name}")
             async def query_table(
-                columns: Optional[str] = None,
-                where_column: Optional[str] = None,
-                where_value: Optional[str] = None,
+                columns: str | None = None,
+                where_column: str | None = None,
+                where_value: str | None = None,
                 limit: int = 50,
             ) -> str:
                 """Read data from the specific table with optional column filtering.
@@ -161,10 +173,7 @@ class DynamicSQLMCPFactory:
                     limit: Max rows to return (default 50).
                 """
                 # Validate column names against reflected schema to prevent injection
-                reflected_cols = [
-                    c["name"]
-                    for c in inspector.get_columns(table_name, schema=schema_name)
-                ]
+                reflected_cols = [c["name"] for c in inspector.get_columns(table_name, schema=schema_name)]
 
                 if columns:
                     requested = [c.strip() for c in columns.split(",")]
@@ -192,7 +201,7 @@ class DynamicSQLMCPFactory:
                     with engine.connect() as conn:
                         result = conn.execute(text(sql), params)
                         col_names = list(result.keys())
-                        rows = [dict(zip(col_names, row)) for row in result.fetchall()]
+                        rows = [dict(zip(col_names, row, strict=False)) for row in result.fetchall()]
                         return json.dumps(
                             {
                                 "table": table_name,
@@ -216,10 +225,7 @@ class DynamicSQLMCPFactory:
             manifest = {}
             for t in tables_to_expose:
                 cols = inspector.get_columns(t, schema=target_schema)
-                manifest[t] = [
-                    {"name": c["name"], "type": str(c["type"]), "nullable": c["nullable"]}
-                    for c in cols
-                ]
+                manifest[t] = [{"name": c["name"], "type": str(c["type"]), "nullable": c["nullable"]} for c in cols]
             return json.dumps(manifest, indent=2)
 
         return mcp

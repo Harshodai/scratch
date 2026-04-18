@@ -50,7 +50,7 @@ class BedrockLLM:
     ) -> None:
         self._region = region_name
         self._model_id = model_id
-        
+
         # Lazy-initialized boto3 client
         self._client = None
         self._credentials = {
@@ -114,14 +114,12 @@ class BedrockLLM:
         # Format for Claude 3 (Messages API style)
         context_str = "\n\n".join(context)
         user_content = f"Context:\n{context_str}\n\nQuestion: {prompt}"
-        
+
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": [
-                {"role": "user", "content": [{"type": "text", "text": user_content}]}
-            ],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": user_content}]}],
         }
         if system_prompt:
             request_body["system"] = system_prompt
@@ -173,23 +171,22 @@ class BedrockLLM:
         Uses invoke_model_with_response_stream.
         """
         import asyncio
+
         client = self._get_client()
 
         context_str = "\n\n".join(context)
         user_content = f"Context:\n{context_str}\n\nQuestion: {prompt}"
-        
+
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": [
-                {"role": "user", "content": [{"type": "text", "text": user_content}]}
-            ],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": user_content}]}],
         }
         if system_prompt:
             request_body["system"] = system_prompt
 
-        # For streaming via boto3 comfortably in an async context, 
+        # For streaming via boto3 comfortably in an async context,
         # we run the blocking iterator in the executor.
         def get_stream():
             return client.invoke_model_with_response_stream(

@@ -37,10 +37,10 @@ from typing import TYPE_CHECKING
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy
 from centrag.cache.l1_memory import L1InMemoryCache
 from centrag.cache.l2_redis import L2RedisCache
-from centrag.cache.semantic import SemanticCache
 from centrag.cache.orchestrator import TieredCacheOrchestrator
-from centrag.mcp.bridge import MCPBridge
-from centrag.retrieval.engine import RetrievalEngine
+from centrag.cache.semantic import SemanticCache
+from centrag.evaluation.failure_store import FailureStore
+from centrag.evaluation.judges import CoverageJudge, FaithfulnessJudge, RelevanceJudge
 from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.parsers.base import ParserRegistry
 from centrag.extraction.pipeline import ExtractionPipeline
@@ -62,24 +62,23 @@ from centrag.implementations.openai_embedder import OpenAIEmbedder
 
 # --- VECTORLESS path implementations (reasoning-based) ---
 from centrag.implementations.pageindex_tree import PageIndexTreeBuilder
+from centrag.implementations.qdrant_graph_store import QdrantGraphStore
 from centrag.ingestion.cleaner import DocumentCleaner, DocumentCleanerConfig
 
 # --- Ingestion (feeds both paths) ---
 from centrag.ingestion.service import IngestionService
+from centrag.mcp.bridge import MCPBridge
 from centrag.memory.in_memory_store import InMemoryStore
+from centrag.retrieval.cag_manager import CAGManager
 from centrag.retrieval.engine import RetrievalEngine
+from centrag.retrieval.graph_retriever import GraphRetriever
 from centrag.retrieval.hybrid import HybridRetriever
+from centrag.retrieval.multivector_retriever import MultivectorRetriever
 from centrag.retrieval.pageindex_retriever import PageIndexRetriever
 from centrag.retrieval.query_router import QueryRouter
 
 # --- SHARED: Dual-path routing & PHASE 4 ---
 from centrag.storage.document_store import DocumentStore
-from centrag.implementations.qdrant_graph_store import QdrantGraphStore
-from centrag.retrieval.graph_retriever import GraphRetriever
-from centrag.retrieval.multivector_retriever import MultivectorRetriever
-from centrag.retrieval.cag_manager import CAGManager
-from centrag.evaluation.failure_store import FailureStore
-from centrag.evaluation.judges import FaithfulnessJudge, RelevanceJudge, CoverageJudge
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -309,14 +308,12 @@ def build_retrieval_engine(
     # --- PHASE 4: Relational, Facet, & CAG paths ---
     # QdrantGraphStore needs the shared store and embedder
     # (Reusing engine_embedder and engine_vectorstore built above)
-    
+
     graph_store = QdrantGraphStore(
-        vector_store=engine_vectorstore,
-        embedder=engine_embedder,
-        collection_name=f"{settings.qdrant_collection}_graph"
+        vector_store=engine_vectorstore, embedder=engine_embedder, collection_name=f"{settings.qdrant_collection}_graph"
     )
     graph_retriever = GraphRetriever(graph_store=graph_store, document_store=document_store)
-    
+
     multivector_retriever = MultivectorRetriever(vectorstore=engine_vectorstore, embedder=engine_embedder)
     cag_manager = CAGManager(document_store=document_store)
 
@@ -326,9 +323,10 @@ def build_retrieval_engine(
         reranker_name = "CohereReranker"
     else:
         try:
-            import FlagEmbedding as _fe  # noqa: F401
+            import FlagEmbedding  # noqa: F401, N813
 
             from centrag.implementations.bge_reranker import BGEV2Reranker
+
             reranker_factory = BGEV2Reranker
             reranker_name = "BGEV2Reranker"
             logger.info("using_bge_v2_reranker")
@@ -337,6 +335,7 @@ def build_retrieval_engine(
                 import flashrank as _fr  # noqa: F401
 
                 from centrag.implementations.flashrank_reranker import FlashRankReranker
+
                 reranker_factory = FlashRankReranker  # type: ignore[assignment]
                 reranker_name = "FlashRankReranker"
             except ImportError:
@@ -438,7 +437,7 @@ def build_ingestion_service(
     if settings.llama_cloud_api_key:
         try:
             from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
-    
+
             llamaparse = LlamaParseExtractor(api_key=settings.llama_cloud_api_key)
             registry.register(llamaparse)
             logger.info("llamaparse_wired")
@@ -502,7 +501,7 @@ def build_ingestion_service(
         graph_store_factory=lambda: QdrantGraphStore(
             vector_store=vectorstore_factory(),
             embedder=embedder_factory(),
-            collection_name=f"{settings.qdrant_collection}_graph"
+            collection_name=f"{settings.qdrant_collection}_graph",
         ),
         cleaner=cleaner,
         collection_name=settings.qdrant_collection,

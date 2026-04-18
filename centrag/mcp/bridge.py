@@ -23,18 +23,20 @@ SOLID: SRP — only coordinates MCP servers, no business logic.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
-from centrag.mcp.source_registry import SourceRegistry, SQLSourceConfig
-from centrag.mcp.tool_registry import ToolRegistry, Toolset
-from centrag.mcp.process_manager import MCPProcessManager
 from centrag.mcp.config_loader import (
-    load_mcp_config,
-    list_prebuilt_configs,
     get_prebuilt_config,
+    list_prebuilt_configs,
+    load_mcp_config,
 )
+from centrag.mcp.process_manager import MCPProcessManager
+from centrag.mcp.source_registry import SourceRegistry, SQLSourceConfig
+from centrag.mcp.tool_registry import ToolRegistry
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = get_logger("mcp.bridge")
 
@@ -64,13 +66,23 @@ class MCPBridge:
         self.tool_registry = ToolRegistry(self.source_registry)
         self.process_manager = MCPProcessManager()
 
+        import contextlib
+        import asyncio
+
+        self._exit_stack = contextlib.AsyncExitStack()
+        self._external_sessions: dict[str, Any] = {}
+        
+        # We lazily initialize the semaphore to avoid attaching 
+        # to the wrong asyncio event loop during synchronous startup.
+        self._external_semaphore: asyncio.Semaphore | None = None
+
         # Backward compat: retained for legacy code paths
-        self._dynamic_servers: Dict[str, Any] = {}
+        self._dynamic_servers: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Declarative Config (Steal #2 from Toolbox)
     # ------------------------------------------------------------------
-    def load_config(self, config_path: str | Path) -> Dict[str, Any]:
+    def load_config(self, config_path: str | Path) -> dict[str, Any]:
         """Load an ``mcp_tools.yaml`` config file and register all resources.
 
         This is the primary entry point for declarative configuration,
@@ -95,8 +107,8 @@ class MCPBridge:
         self,
         name: str,
         connection_string: str,
-        schema: Optional[str] = None,
-        tables: Optional[list[str]] = None,
+        schema: str | None = None,
+        tables: list[str] | None = None,
     ) -> bool:
         """Create and register a dynamic SQL MCP source with auto-generated tools.
 
@@ -138,11 +150,157 @@ class MCPBridge:
             )
             return False
 
+    def register_aws_source(
+        self,
+        name: str,
+        kind: str,
+        region: str = "us-east-1",
+        role_arn: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> bool:
+        """Create and register an AWS MCP source dynamically (e.g. from UI)."""
+        try:
+            from centrag.mcp.source_registry import AWSSourceConfig
+
+            config = AWSSourceConfig(name=name, kind=kind, region=region, role_arn=role_arn, options=options or {})
+            source = self.source_registry.add(config)
+
+            tools_created = 0
+            if kind == "aws-dynamodb":
+                from centrag.mcp.aws.dynamodb import generate_dynamodb_tools
+
+                tools = generate_dynamodb_tools(source)
+            elif kind == "aws-athena":
+                from centrag.mcp.aws.athena import generate_athena_tools
+
+                tools = generate_athena_tools(source)
+            elif kind == "aws-s3":
+                from centrag.mcp.aws.s3 import generate_s3_tools
+
+                tools = generate_s3_tools(source)
+            elif kind == "aws-emr":
+                from centrag.mcp.aws.emr import generate_emr_tools
+
+                tools = generate_emr_tools(source)
+            else:
+                tools = []
+
+            for t in tools:
+                self.tool_registry.register(t)
+            tools_created = len(tools)
+
+            logger.info(
+                "mcp_bridge_aws_registered",
+                name=name,
+                kind=kind,
+                tools_created=tools_created,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "mcp_bridge_aws_registration_failed",
+                name=name,
+                error=str(e),
+            )
+            return False
+
+    async def register_external_mcp_sse(self, name: str, url: str, headers: dict[str, str] | None = None) -> bool:
+        """Register a remote SSE MCP server and proxy its tools."""
+        try:
+            from mcp.client.session import ClientSession
+            from mcp.client.sse import sse_client
+
+            read, write = await self._exit_stack.enter_async_context(sse_client(url, headers=headers))
+            session = await self._exit_stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+
+            self._external_sessions[name] = session
+            await self._proxy_tools(name, session)
+            logger.info("mcp_bridge_external_sse_registered", name=name, url=url)
+            return True
+        except Exception as e:
+            logger.error("mcp_bridge_sse_registration_failed", name=name, error=str(e))
+            return False
+
+    async def register_external_mcp_stdio(
+        self, name: str, command: str, args: list[str], env: dict[str, str] | None = None
+    ) -> bool:
+        """Register a local stdio MCP server and proxy its tools."""
+        try:
+            from mcp.client.session import ClientSession
+            from mcp.client.stdio import StdioServerParameters, stdio_client
+
+            # Start via process manager for lifetime tracking context (legacy UI check)
+            cmd = [command] + args
+            await self.launch_external_server(name, cmd, env)
+
+            server_params = StdioServerParameters(command=command, args=args, env=env)
+            read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
+            session = await self._exit_stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+
+            self._external_sessions[name] = session
+            await self._proxy_tools(name, session)
+            logger.info("mcp_bridge_external_stdio_registered", name=name, command=command)
+            return True
+        except Exception as e:
+            logger.error("mcp_bridge_stdio_registration_failed", name=name, error=str(e))
+            return False
+
+    async def _proxy_tools(self, source_name: str, session: Any) -> None:
+        """Proxy upstream tools into the internal ToolRegistry."""
+        from centrag.mcp.tool_registry import MCPTool, ToolManifest
+
+        tools_response = await session.list_tools()
+        for t in tools_response.tools:
+
+            async def proxy_handler(tool_target=t.name, session_ref=session, **kwargs) -> str:
+                import asyncio
+                
+                # Lazy initialization logic
+                if self._external_semaphore is None:
+                    self._external_semaphore = asyncio.Semaphore(10)
+                    
+                # Rate limit execution using centralized semaphore and wait_for execution limits
+                async with self._external_semaphore:
+                    try:
+                        res = await asyncio.wait_for(
+                            session_ref.call_tool(tool_target, arguments=kwargs),
+                            timeout=60.0
+                        )
+                        if hasattr(res, "content") and res.content:
+                            return "\n".join(b.text for b in res.content if hasattr(b, "text"))
+                        return str(res)
+                    except asyncio.TimeoutError:
+                        logger.error("mcp_bridge_proxy_timeout", tool=tool_target)
+                        return f"Error: MCP Server proxy call to '{tool_target}' timed out after 60 seconds."
+
+            input_params = []
+            if getattr(t, "inputSchema", None):
+                props = t.inputSchema.get("properties", {})
+                for prop_name, prop_details in props.items():
+                    input_params.append(
+                        {
+                            "name": prop_name,
+                            "type": prop_details.get("type", "string"),
+                            "description": prop_details.get("description", ""),
+                        }
+                    )
+
+            manifest = ToolManifest(
+                name=f"{source_name}.{t.name}",
+                description=t.description or "",
+                source_name=source_name,
+                parameters=input_params,
+            )
+            proxy_tool = MCPTool(manifest=manifest, handler=proxy_handler)
+            self.tool_registry.register(proxy_tool)
+
     async def launch_external_server(
         self,
         name: str,
-        command: List[str],
-        env: Optional[Dict[str, str]] = None,
+        command: list[str],
+        env: dict[str, str] | None = None,
     ) -> bool:
         """Launch an external MCP server process (e.g. AWS, Jira).
 
@@ -156,9 +314,7 @@ class MCPBridge:
     # ------------------------------------------------------------------
     # Tool Execution
     # ------------------------------------------------------------------
-    async def call_tool(
-        self, tool_name: str, params: Dict[str, Any]
-    ) -> str:
+    async def call_tool(self, tool_name: str, params: dict[str, Any]) -> str:
         """
         Unified tool calling gateway with 3-tier resolution.
 
@@ -214,19 +370,16 @@ class MCPBridge:
                 "mcp_bridge_external_client_not_ready",
                 server=server_name,
             )
-            return (
-                f"Error: MCP Client Session for external server "
-                f"'{server_name}' not yet initialized."
-            )
+            return f"Error: MCP Client Session for external server '{server_name}' not yet initialized."
 
         return f"Error: MCP tool '{tool_name}' not found in any tier."
 
     # ------------------------------------------------------------------
     # Introspection
     # ------------------------------------------------------------------
-    def list_servers(self) -> Dict[str, str]:
+    def list_servers(self) -> dict[str, str]:
         """List all registered sources and servers with their status."""
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
 
         # Sources from the new registry
         for name, source_type in self.source_registry.list_sources().items():
@@ -245,27 +398,29 @@ class MCPBridge:
 
         return result
 
-    def list_tools(self) -> Dict[str, Dict[str, Any]]:
+    def list_tools(self) -> dict[str, dict[str, Any]]:
         """List all registered tools with their manifests."""
         return self.tool_registry.list_tools()
 
-    def list_toolsets(self) -> Dict[str, List[str]]:
+    def list_toolsets(self) -> dict[str, list[str]]:
         """List all toolset groupings."""
         return self.tool_registry.list_toolsets()
 
-    def list_prebuilt_templates(self) -> List[str]:
+    def list_prebuilt_templates(self) -> list[str]:
         """List available prebuilt config templates (Steal #3)."""
         return list_prebuilt_configs()
 
-    def get_prebuilt_template(self, name: str) -> Optional[str]:
+    def get_prebuilt_template(self, name: str) -> str | None:
         """Get a prebuilt config template by database type."""
         return get_prebuilt_config(name)
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
-    def shutdown(self) -> None:
+    async def shutdown(self) -> None:
         """Cleanup all managed resources."""
+        if hasattr(self, "_exit_stack"):
+            await self._exit_stack.aclose()
         self.process_manager.shutdown_all()
         self._dynamic_servers.clear()
         logger.info("mcp_bridge_shutdown_complete")

@@ -22,13 +22,13 @@ logger = get_logger("extraction.graph")
 class GraphExtractor:
     """
     LLM-powered knowledge extraction for the Graph RAG path.
-    
+
     The WHY:
-        Conventional chunking breaks semantic connections. By extracting 
-        explicit triples, we create a 'Knowledge Network' that can be 
-        traversed regardless of where the information is physically 
+        Conventional chunking breaks semantic connections. By extracting
+        explicit triples, we create a 'Knowledge Network' that can be
+        traversed regardless of where the information is physically
         stored in the document.
-        
+
     Rules:
         1. Only extract essential relations.
         2. Normalize entity names (resolve pronouns).
@@ -59,14 +59,10 @@ class GraphExtractor:
         prompt = f"Text to extract from:\n{text[:2000]}\n\nJSON Output:"
 
         try:
-            response = await self._llm.generate(
-                prompt=prompt, 
-                context=[], 
-                system_prompt=system_prompt,
-                temperature=0.0
-            )
-            
+            response = await self._llm.generate(prompt=prompt, context=[], system_prompt=system_prompt, temperature=0.0)
+
             import re
+
             content = response.content.strip()
             # Robust regex-based JSON extraction to handle LLM conversational slop
             # Graph extractor expects an array []
@@ -74,20 +70,22 @@ class GraphExtractor:
             if not match:
                 logger.warning("no_json_array_found_in_response", content=content[:100])
                 return []
-            
+
             clean_content = match.group(0)
             data = json.loads(clean_content)
-            
+
             triplets = []
             for item in data:
                 if "subject" in item and "predicate" in item and "object" in item:
-                    triplets.append(Relation(
-                        subject=item["subject"],
-                        predicate=item["predicate"],
-                        object=item["object"],
-                        metadata={"source_doc": document_title}
-                    ))
-            
+                    triplets.append(
+                        Relation(
+                            subject=item["subject"],
+                            predicate=item["predicate"],
+                            object=item["object"],
+                            metadata={"source_doc": document_title},
+                        )
+                    )
+
             return triplets
         except Exception as e:
             logger.error("graph_extraction_failed", error=str(e), text_sample=text[:100])

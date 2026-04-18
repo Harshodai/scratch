@@ -27,7 +27,7 @@ class QueryIntent:
     # Optional metadata filters extracted from the natural language
     # e.g., "for year 2024" -> VectorFilter applying {"year": 2024}
     extracted_filter: VectorFilter | None = None
-    
+
     # Dynamic expansion depth for graph retrieval (0 = disabled, 1 = direct, 2+ = multi-hop)
     reasoning_hops: int = 0
 

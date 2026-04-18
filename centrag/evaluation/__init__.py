@@ -16,7 +16,6 @@ Components:
 from centrag.evaluation.comparator import ComparisonResult, PathComparator
 from centrag.evaluation.dataset import GoldenDataset, TestCase
 from centrag.evaluation.failure_store import FailureCase, FailureCategory, FailureStore
-from centrag.evaluation.runner import EvaluationRunner
 from centrag.evaluation.judges import (
     CoverageJudge,
     FaithfulnessJudge,
@@ -32,6 +31,7 @@ from centrag.evaluation.metrics import (
     precision_at_k,
     recall_at_k,
 )
+from centrag.evaluation.runner import EvaluationRunner
 
 __all__ = [
     "GoldenDataset",

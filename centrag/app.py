@@ -29,11 +29,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from centrag.config import Settings, get_settings
 from centrag.ingestion.worker import IngestionWorker, WorkerConfig
-
 from centrag.middleware.rate_limiter import SimpleRateLimitMiddleware
 from centrag.storage.document_store import DocumentStore
-from centrag.wiring import build_ingestion_service, build_retrieval_engine
 from centrag.utils.lifecycle import shutdown_registry
+from centrag.utils.logger import get_logger
+from centrag.wiring import build_ingestion_service, build_retrieval_engine
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -51,7 +51,7 @@ async def _init_postgres(app: FastAPI, settings: Settings):
             pool_size=settings.pg_pool_max,
             pool_pre_ping=True,
         )
-        shutdown_registry.register(app.state.db_engine.dispose, priority=50) # Close DB last
+        shutdown_registry.register(app.state.db_engine.dispose, priority=50)  # Close DB last
         logger.info("postgres_initialized", dsn_host=settings.pg_host)
     except Exception as e:
         logger.warning(
@@ -139,17 +139,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config=WorkerConfig(),
     )
     await worker.start()
-    shutdown_registry.register(worker.shutdown, priority=10) # Drain worker first
+    shutdown_registry.register(worker.shutdown, priority=10)  # Drain worker first
     app.state.ingestion_worker = worker
 
     # --- Initialize MCP (Model Context Protocol) ---
     if settings.enable_mcp:
         engine = app.state.retrieval_engine
         bridge = engine.mcp_bridge
-        
+
         if bridge:
             # 1. Load Declarative Config (Steal #2)
             from pathlib import Path
+
             config_path = Path(settings.mcp_tools_config_path)
             if config_path.exists():
                 try:
@@ -162,19 +163,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             for db_name, conn_str in settings.mcp_internal_dbs.items():
                 bridge.register_dynamic_db(db_name, conn_str)
                 logger.info("mcp_bridge_db_registered", name=db_name)
-                
+
             # 3. Launch External Servers (Managed Subprocesses)
             for srv_name, command in settings.mcp_external_servers.items():
                 bridge.launch_external_server(srv_name, command)
                 logger.info("mcp_bridge_server_launched", name=srv_name)
-                
+
             # Ensure cleanup on shutdown
             shutdown_registry.register(bridge.shutdown, priority=1)
-            
+
         try:
             from mcp.server.fastmcp import FastMCP
+
             from centrag.mcp_bridge.rag_as_mcp_tool import register_rag_tools
-            
+
             mcp_server = FastMCP("CentRAG-Retriever")
             register_rag_tools(mcp_server, app.state.retrieval_engine)
             app.state.mcp_server = mcp_server
@@ -235,11 +237,11 @@ def create_app() -> FastAPI:
     )
 
     # --- Routes ---
+    from centrag.routes.documents import router as documents_router
+    from centrag.routes.evaluate import router as evaluate_router
     from centrag.routes.feedback import router as feedback_router
     from centrag.routes.health import router as health_router
     from centrag.routes.retrieve import router as retrieve_router
-    from centrag.routes.documents import router as documents_router
-    from centrag.routes.evaluate import router as evaluate_router
 
     app.include_router(health_router)
     app.include_router(feedback_router, prefix="/v1")

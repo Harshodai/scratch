@@ -106,19 +106,13 @@ class FlashRankReranker:
 
         if not query.strip():
             logger.warning("flashrank_rerank_empty_query")
-            return [
-                RerankResult(index=i, text=doc, relevance_score=0.0)
-                for i, doc in enumerate(documents[:top_n])
-            ]
+            return [RerankResult(index=i, text=doc, relevance_score=0.0) for i, doc in enumerate(documents[:top_n])]
 
         try:
             ranker = self._get_ranker()
 
             # FlashRank expects list of dicts with "id" and "text" keys
-            passages = [
-                {"id": str(i), "text": doc}
-                for i, doc in enumerate(documents)
-            ]
+            passages = [{"id": str(i), "text": doc} for i, doc in enumerate(documents)]
 
             # FlashRank Ranker.rerank() is synchronous and CPU-bound.
             # Wrap in asyncio.to_thread to avoid blocking the event loop.
@@ -176,10 +170,9 @@ class FlashRankReranker:
             Bi-Encoder ordering is "good enough" as a fallback.
         """
         logger.warning("flashrank_rerank_fallback", message="Using original order")
-        return [
-            RerankResult(index=i, text=doc, relevance_score=0.5)
-            for i, doc in enumerate(documents[:top_n])
-        ]
+        return [RerankResult(index=i, text=doc, relevance_score=0.5) for i, doc in enumerate(documents[:top_n])]
+
+
 """
 Description:
     FlashRank fills the second tier in the reranker selection hierarchy.

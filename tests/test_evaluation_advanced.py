@@ -12,18 +12,15 @@ All tests are deterministic (NoOp, no external LLM calls).
 
 from __future__ import annotations
 
-import json
-import os
 import tempfile
 
 import pytest
 
-from centrag.evaluation.dataset import Difficulty, TestCase
+from centrag.evaluation.dataset import TestCase
 from centrag.evaluation.failure_store import (
     FailureCase,
     FailureCategory,
     FailureStore,
-    case_result_to_failure,
     classify_failure,
 )
 from centrag.evaluation.judges import JudgeResult
@@ -36,7 +33,6 @@ from centrag.evaluation.metrics import (
     precision_at_k,
     recall_at_k,
 )
-
 
 # ── IR Metrics — Pure Functions ─────────────────────────────────────
 
@@ -231,32 +227,60 @@ class TestFailureStore:
 
     def test_filter_by_category(self):
         store = FailureStore()
-        store.add(FailureCase(
-            case_id="1", query="Q1", expected_answer="A1", generated_answer="B1",
-            category=FailureCategory.HALLUCINATION, composite_score=0.1,
-            retrieval_path="vector", latency_ms=100,
-        ))
-        store.add(FailureCase(
-            case_id="2", query="Q2", expected_answer="A2", generated_answer="B2",
-            category=FailureCategory.OFF_TOPIC, composite_score=0.2,
-            retrieval_path="vector", latency_ms=200,
-        ))
-        store.add(FailureCase(
-            case_id="3", query="Q3", expected_answer="A3", generated_answer="B3",
-            category=FailureCategory.HALLUCINATION, composite_score=0.15,
-            retrieval_path="pageindex", latency_ms=300,
-        ))
+        store.add(
+            FailureCase(
+                case_id="1",
+                query="Q1",
+                expected_answer="A1",
+                generated_answer="B1",
+                category=FailureCategory.HALLUCINATION,
+                composite_score=0.1,
+                retrieval_path="vector",
+                latency_ms=100,
+            )
+        )
+        store.add(
+            FailureCase(
+                case_id="2",
+                query="Q2",
+                expected_answer="A2",
+                generated_answer="B2",
+                category=FailureCategory.OFF_TOPIC,
+                composite_score=0.2,
+                retrieval_path="vector",
+                latency_ms=200,
+            )
+        )
+        store.add(
+            FailureCase(
+                case_id="3",
+                query="Q3",
+                expected_answer="A3",
+                generated_answer="B3",
+                category=FailureCategory.HALLUCINATION,
+                composite_score=0.15,
+                retrieval_path="pageindex",
+                latency_ms=300,
+            )
+        )
 
         hallucinations = store.filter_by_category(FailureCategory.HALLUCINATION)
         assert len(hallucinations) == 2
 
     def test_summary(self):
         store = FailureStore()
-        store.add(FailureCase(
-            case_id="1", query="Q", expected_answer="A", generated_answer="B",
-            category=FailureCategory.RETRIEVAL_MISS, composite_score=0.3,
-            retrieval_path="vector", latency_ms=100,
-        ))
+        store.add(
+            FailureCase(
+                case_id="1",
+                query="Q",
+                expected_answer="A",
+                generated_answer="B",
+                category=FailureCategory.RETRIEVAL_MISS,
+                composite_score=0.3,
+                retrieval_path="vector",
+                latency_ms=100,
+            )
+        )
         summary = store.summary()
         assert summary["total_failures"] == 1
         assert "retrieval_miss" in summary["by_category"]
@@ -264,12 +288,19 @@ class TestFailureStore:
     def test_save_and_load_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = FailureStore(output_dir=tmpdir)
-            store.add(FailureCase(
-                case_id="tc-1", query="Q", expected_answer="A", generated_answer="B",
-                category=FailureCategory.HALLUCINATION, composite_score=0.2,
-                retrieval_path="hybrid", latency_ms=500,
-                judge_scores={"faithfulness": 0.1},
-            ))
+            store.add(
+                FailureCase(
+                    case_id="tc-1",
+                    query="Q",
+                    expected_answer="A",
+                    generated_answer="B",
+                    category=FailureCategory.HALLUCINATION,
+                    composite_score=0.2,
+                    retrieval_path="hybrid",
+                    latency_ms=500,
+                    judge_scores={"faithfulness": 0.1},
+                )
+            )
             path = store.save()
             assert path is not None
 

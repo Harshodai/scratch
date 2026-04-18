@@ -26,21 +26,32 @@ SOLID: ISP — tools only see ``SourceProvider``, not the full server.
 from __future__ import annotations
 
 import json
-import re
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
-from centrag.mcp.source_registry import MCPSource, SQLSource, SourceRegistry, _validate_name
+from centrag.mcp.source_registry import SourceRegistry, SQLSource, _validate_name
 from centrag.utils.logger import get_logger
 
 logger = get_logger("mcp.tool_registry")
 
 # Blocked SQL keywords for read-only enforcement (carried from DynamicSQLMCPFactory)
-_BLOCKED_KEYWORDS = frozenset({
-    "DROP", "DELETE", "UPDATE", "INSERT", "TRUNCATE", "ALTER",
-    "CREATE", "GRANT", "REVOKE", "EXEC", "EXECUTE", "MERGE",
-})
+_BLOCKED_KEYWORDS = frozenset(
+    {
+        "DROP",
+        "DELETE",
+        "UPDATE",
+        "INSERT",
+        "TRUNCATE",
+        "ALTER",
+        "CREATE",
+        "GRANT",
+        "REVOKE",
+        "EXEC",
+        "EXECUTE",
+        "MERGE",
+    }
+)
 
 
 def _is_read_only(query: str) -> bool:
@@ -63,10 +74,10 @@ class ToolAnnotations:
     Reference: https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations
     """
 
-    read_only_hint: Optional[bool] = None
-    destructive_hint: Optional[bool] = None
-    idempotent_hint: Optional[bool] = None
-    open_world_hint: Optional[bool] = None
+    read_only_hint: bool | None = None
+    destructive_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    open_world_hint: bool | None = None
 
     @classmethod
     def read_only(cls) -> ToolAnnotations:
@@ -78,9 +89,9 @@ class ToolAnnotations:
         """Factory for destructive tools (mirrors Toolbox ``NewDestructiveAnnotations``)."""
         return cls(read_only_hint=False, destructive_hint=True)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize for MCP manifest."""
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         if self.read_only_hint is not None:
             result["readOnlyHint"] = self.read_only_hint
         if self.destructive_hint is not None:
@@ -108,11 +119,11 @@ class ToolManifest:
     description: str
     source_name: str
     annotations: ToolAnnotations = field(default_factory=ToolAnnotations.read_only)
-    parameters: List[Dict[str, Any]] = field(default_factory=list)
+    parameters: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to MCP-compatible manifest format."""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "source": self.source_name,
@@ -164,7 +175,7 @@ class MCPTool:
     def source_name(self) -> str:
         return self.manifest.source_name
 
-    async def invoke(self, params: Dict[str, Any]) -> str:
+    async def invoke(self, params: dict[str, Any]) -> str:
         """Execute the tool with the given parameters."""
         return await self.handler(**params)
 
@@ -189,10 +200,10 @@ class Toolset:
     """
 
     name: str
-    tool_names: List[str]
+    tool_names: list[str]
     description: str = ""
 
-    def resolve(self, tool_map: Dict[str, MCPTool]) -> List[MCPTool]:
+    def resolve(self, tool_map: dict[str, MCPTool]) -> list[MCPTool]:
         """Resolve tool names to actual tool instances.
 
         Mirrors Toolbox ``ToolsetConfig.Initialize()`` (``toolsets.go:43-67``).
@@ -232,8 +243,8 @@ class ToolRegistry:
 
     def __init__(self, source_registry: SourceRegistry) -> None:
         self._source_registry = source_registry
-        self._tools: Dict[str, MCPTool] = {}
-        self._toolsets: Dict[str, Toolset] = {}
+        self._tools: dict[str, MCPTool] = {}
+        self._toolsets: dict[str, Toolset] = {}
 
     def register(self, tool: MCPTool) -> None:
         """Register a tool instance."""
@@ -256,39 +267,30 @@ class ToolRegistry:
             tool_count=len(toolset.tool_names),
         )
 
-    def get(self, name: str) -> Optional[MCPTool]:
+    def get(self, name: str) -> MCPTool | None:
         """Look up a tool by name."""
         return self._tools.get(name)
 
-    def get_toolset(self, name: str) -> Optional[List[MCPTool]]:
+    def get_toolset(self, name: str) -> list[MCPTool] | None:
         """Get resolved tools for a toolset."""
         toolset = self._toolsets.get(name)
         if toolset is None:
             return None
         return toolset.resolve(self._tools)
 
-    def list_tools(self) -> Dict[str, Dict[str, Any]]:
+    def list_tools(self) -> dict[str, dict[str, Any]]:
         """List all tools with their manifests."""
-        return {
-            name: tool.manifest.to_dict()
-            for name, tool in self._tools.items()
-        }
+        return {name: tool.manifest.to_dict() for name, tool in self._tools.items()}
 
-    def list_toolsets(self) -> Dict[str, List[str]]:
+    def list_toolsets(self) -> dict[str, list[str]]:
         """List all toolsets and their tool names."""
-        return {
-            name: ts.tool_names
-            for name, ts in self._toolsets.items()
-        }
+        return {name: ts.tool_names for name, ts in self._toolsets.items()}
 
-    def tools_for_source(self, source_name: str) -> List[MCPTool]:
+    def tools_for_source(self, source_name: str) -> list[MCPTool]:
         """Get all tools bound to a specific source."""
-        return [
-            t for t in self._tools.values()
-            if t.source_name == source_name
-        ]
+        return [t for t in self._tools.values() if t.source_name == source_name]
 
-    async def invoke(self, tool_name: str, params: Dict[str, Any]) -> str:
+    async def invoke(self, tool_name: str, params: dict[str, Any]) -> str:
         """Execute a tool by name with the given parameters."""
         tool = self._tools.get(tool_name)
         if tool is None:
@@ -366,42 +368,38 @@ class ToolRegistry:
                     result = conn.execute(text(query))
                     if result.returns_rows:
                         columns = list(result.keys())
-                        rows = [
-                            dict(zip(columns, row))
-                            for row in result.fetchmany(limit)
-                        ]
+                        rows = [dict(zip(columns, row, strict=False)) for row in result.fetchmany(limit)]
                         return json.dumps(
-                            {"columns": columns, "rows": rows, "count": len(rows),
-                             "truncated": len(rows) >= limit},
+                            {"columns": columns, "rows": rows, "count": len(rows), "truncated": len(rows) >= limit},
                             default=str,
                         )
                     return "Query executed (no rows returned)."
             except Exception as e:
                 return f"Database Error: {e}"
 
-        self.register(MCPTool(
-            manifest=ToolManifest(
-                name=f"{source.name}.execute_read_query",
-                description=f"Execute a read-only SQL query on {source.name}.",
-                source_name=source.name,
-                annotations=ToolAnnotations.read_only(),
-                parameters=[
-                    {"name": "query", "type": "string", "description": "SQL SELECT statement."},
-                    {"name": "limit", "type": "integer", "description": "Max rows (default 100)."},
-                ],
-            ),
-            handler=handler,
-        ))
+        self.register(
+            MCPTool(
+                manifest=ToolManifest(
+                    name=f"{source.name}.execute_read_query",
+                    description=f"Execute a read-only SQL query on {source.name}.",
+                    source_name=source.name,
+                    annotations=ToolAnnotations.read_only(),
+                    parameters=[
+                        {"name": "query", "type": "string", "description": "SQL SELECT statement."},
+                        {"name": "limit", "type": "integer", "description": "Max rows (default 100)."},
+                    ],
+                ),
+                handler=handler,
+            )
+        )
 
     def _register_table_query_tool(self, source: SQLSource, table: str) -> None:
         """Register a parameterized query tool for a specific table."""
-        from sqlalchemy import text, inspect as sa_inspect
+        from sqlalchemy import inspect as sa_inspect
+        from sqlalchemy import text
 
         insp = sa_inspect(source.engine)
-        reflected_cols = [
-            c["name"]
-            for c in insp.get_columns(table, schema=source.schema)
-        ]
+        reflected_cols = [c["name"] for c in insp.get_columns(table, schema=source.schema)]
 
         async def handler(
             columns: str = "",
@@ -419,7 +417,7 @@ class ToolRegistry:
                 col_str = "*"
 
             sql = f"SELECT {col_str} FROM {source.schema}.{table}"
-            params: Dict[str, Any] = {}
+            params: dict[str, Any] = {}
 
             if where_column and where_value:
                 if where_column not in reflected_cols:
@@ -434,30 +432,35 @@ class ToolRegistry:
                 with source.engine.connect() as conn:
                     result = conn.execute(text(sql), params)
                     col_names = list(result.keys())
-                    rows = [dict(zip(col_names, row)) for row in result.fetchall()]
+                    rows = [dict(zip(col_names, row, strict=False)) for row in result.fetchall()]
                     return json.dumps(
-                        {"table": table, "columns": col_names, "rows": rows,
-                         "count": len(rows)},
+                        {"table": table, "columns": col_names, "rows": rows, "count": len(rows)},
                         default=str,
                     )
             except Exception as e:
                 return f"Database Error: {e}"
 
-        self.register(MCPTool(
-            manifest=ToolManifest(
-                name=f"{source.name}.query_{table}",
-                description=f"Query the '{table}' table in {source.name} with optional filtering.",
-                source_name=source.name,
-                annotations=ToolAnnotations.read_only(),
-                parameters=[
-                    {"name": "columns", "type": "string", "description": "Comma-separated column names (default: all)."},
-                    {"name": "where_column", "type": "string", "description": "Column name for WHERE filter."},
-                    {"name": "where_value", "type": "string", "description": "Value to filter by."},
-                    {"name": "limit", "type": "integer", "description": "Max rows (default 50)."},
-                ],
-            ),
-            handler=handler,
-        ))
+        self.register(
+            MCPTool(
+                manifest=ToolManifest(
+                    name=f"{source.name}.query_{table}",
+                    description=f"Query the '{table}' table in {source.name} with optional filtering.",
+                    source_name=source.name,
+                    annotations=ToolAnnotations.read_only(),
+                    parameters=[
+                        {
+                            "name": "columns",
+                            "type": "string",
+                            "description": "Comma-separated column names (default: all).",
+                        },
+                        {"name": "where_column", "type": "string", "description": "Column name for WHERE filter."},
+                        {"name": "where_value", "type": "string", "description": "Value to filter by."},
+                        {"name": "limit", "type": "integer", "description": "Max rows (default 50)."},
+                    ],
+                ),
+                handler=handler,
+            )
+        )
 
     def _register_describe_schema_tool(self, source: SQLSource) -> None:
         """Register a schema introspection tool."""
@@ -465,21 +468,20 @@ class ToolRegistry:
 
         async def handler() -> str:
             insp = sa_inspect(source.engine)
-            manifest: Dict[str, Any] = {}
+            manifest: dict[str, Any] = {}
             for t in source.tables:
                 cols = insp.get_columns(t, schema=source.schema)
-                manifest[t] = [
-                    {"name": c["name"], "type": str(c["type"]), "nullable": c["nullable"]}
-                    for c in cols
-                ]
+                manifest[t] = [{"name": c["name"], "type": str(c["type"]), "nullable": c["nullable"]} for c in cols]
             return json.dumps(manifest, indent=2)
 
-        self.register(MCPTool(
-            manifest=ToolManifest(
-                name=f"{source.name}.describe_schema",
-                description=f"List all tables and columns available in {source.name}.",
-                source_name=source.name,
-                annotations=ToolAnnotations.read_only(),
-            ),
-            handler=handler,
-        ))
+        self.register(
+            MCPTool(
+                manifest=ToolManifest(
+                    name=f"{source.name}.describe_schema",
+                    description=f"List all tables and columns available in {source.name}.",
+                    source_name=source.name,
+                    annotations=ToolAnnotations.read_only(),
+                ),
+                handler=handler,
+            )
+        )

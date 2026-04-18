@@ -4,7 +4,7 @@ Tests for BGEV2Reranker — validates score normalization, fallback, and protoco
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -96,9 +96,7 @@ async def test_bge_reranker_fallback_on_error():
         return_value=mock_model,
     ):
         reranker = BGEV2Reranker()
-        results = await reranker.rerank(
-            "query", documents=["doc1", "doc2", "doc3"], top_n=2
-        )
+        results = await reranker.rerank("query", documents=["doc1", "doc2", "doc3"], top_n=2)
 
     # Fallback returns original order with 0.5 score
     assert len(results) == 2
@@ -134,9 +132,7 @@ async def test_bge_reranker_preserves_original_index():
         return_value=mock_model,
     ):
         reranker = BGEV2Reranker()
-        results = await reranker.rerank(
-            "query", documents=["doc_a", "doc_b", "doc_c"], top_n=3
-        )
+        results = await reranker.rerank("query", documents=["doc_a", "doc_b", "doc_c"], top_n=3)
 
     # doc_c (index=2) should be first after reranking
     assert results[0].index == 2

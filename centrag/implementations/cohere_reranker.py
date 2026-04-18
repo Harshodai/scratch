@@ -21,13 +21,8 @@ SOLID: Liskov — drop-in replacement for NoOpReranker.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from centrag.abstractions.reranker import RerankResult, RerankerProtocol
+from centrag.abstractions.reranker import RerankResult
 from centrag.utils.logger import get_logger
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger("implementations.cohere_reranker")
 
@@ -103,10 +98,7 @@ class CohereReranker:
 
         if not query.strip():
             logger.warning("cohere_rerank_empty_query")
-            return [
-                RerankResult(index=i, text=doc, relevance_score=0.0)
-                for i, doc in enumerate(documents[:top_n])
-            ]
+            return [RerankResult(index=i, text=doc, relevance_score=0.0) for i, doc in enumerate(documents[:top_n])]
 
         try:
             client = self._get_client()
@@ -168,7 +160,4 @@ class CohereReranker:
             Bi-Encoder ordering is "good enough" as a fallback.
         """
         logger.warning("cohere_rerank_fallback", message="Using original order")
-        return [
-            RerankResult(index=i, text=doc, relevance_score=0.5)
-            for i, doc in enumerate(documents[:top_n])
-        ]
+        return [RerankResult(index=i, text=doc, relevance_score=0.5) for i, doc in enumerate(documents[:top_n])]

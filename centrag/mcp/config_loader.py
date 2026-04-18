@@ -32,17 +32,17 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import yaml  # PyYAML — already in our dependencies
 
-from centrag.mcp.source_registry import SQLSourceConfig, SourceRegistry
+from centrag.mcp.source_registry import SourceRegistry, SQLSourceConfig
 from centrag.mcp.tool_registry import (
     MCPTool,
-    Toolset,
     ToolAnnotations,
     ToolManifest,
     ToolRegistry,
+    Toolset,
 )
 from centrag.utils.logger import get_logger
 
@@ -60,6 +60,7 @@ def _resolve_env_vars(value: str) -> str:
     Stolen from Toolbox's YAML env-var interpolation seen in prebuilt
     configs (e.g. ``${POSTGRES_HOST:localhost}``).
     """
+
     def replacer(match: re.Match) -> str:
         expr = match.group(1)
         if ":" in expr:
@@ -70,19 +71,16 @@ def _resolve_env_vars(value: str) -> str:
     return _ENV_PATTERN.sub(replacer, value)
 
 
-def _resolve_dict(data: Dict[str, Any]) -> Dict[str, Any]:
+def _resolve_dict(data: dict[str, Any]) -> dict[str, Any]:
     """Recursively resolve environment variables in a config dict."""
-    resolved: Dict[str, Any] = {}
+    resolved: dict[str, Any] = {}
     for key, value in data.items():
         if isinstance(value, str):
             resolved[key] = _resolve_env_vars(value)
         elif isinstance(value, dict):
             resolved[key] = _resolve_dict(value)
         elif isinstance(value, list):
-            resolved[key] = [
-                _resolve_env_vars(v) if isinstance(v, str) else v
-                for v in value
-            ]
+            resolved[key] = [_resolve_env_vars(v) if isinstance(v, str) else v for v in value]
         else:
             resolved[key] = value
     return resolved
@@ -95,7 +93,7 @@ def load_mcp_config(
     config_path: str | Path,
     source_registry: SourceRegistry,
     tool_registry: ToolRegistry,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Parse a ``mcp_tools.yaml`` file and register all sources, tools, toolsets.
 
     Mirrors Toolbox ``config.go:149-238`` — reads YAML, dispatches by
@@ -135,24 +133,60 @@ def load_mcp_config(
 
     config = _resolve_dict(config)
 
-    summary: Dict[str, Any] = {"sources": 0, "tools": 0, "toolsets": 0}
+    summary: dict[str, Any] = {"sources": 0, "tools": 0, "toolsets": 0}
 
     # 1. Parse Sources (mirrors Toolbox ``case "source":``)
     if "sources" in config:
         for name, source_def in config["sources"].items():
             kind = source_def.get("kind", "postgres")
 
-            source_config = SQLSourceConfig(
-                name=name,
-                connection_string=source_def.get("connection_string", ""),
-                kind=kind,
-                schema=source_def.get("schema"),
-                read_only=source_def.get("read_only", True),
-            )
-            source_registry.add(source_config)
+            if kind.startswith("aws-"):
+                from centrag.mcp.source_registry import AWSSourceConfig
 
-            # Auto-generate tools from schema reflection
-            tool_registry.generate_sql_tools(name)
+                source_config = AWSSourceConfig(
+                    name=name,
+                    region=source_def.get("region", "us-east-1"),
+                    role_arn=source_def.get("role_arn"),
+                    session_duration=source_def.get("session_duration", 3600),
+                    endpoint_url=source_def.get("endpoint_url"),
+                    kind=kind,
+                    options=source_def.get("options", {}),
+                )
+                source = source_registry.add(source_config)
+
+                # Register the exact AWS tools based on the sub-kind
+                if kind == "aws-s3":
+                    from centrag.mcp.aws.s3 import generate_s3_tools
+
+                    for t in generate_s3_tools(source):
+                        tool_registry.register(t)
+                elif kind == "aws-dynamodb":
+                    from centrag.mcp.aws.dynamodb import generate_dynamodb_tools
+
+                    for t in generate_dynamodb_tools(source):
+                        tool_registry.register(t)
+                elif kind == "aws-athena":
+                    from centrag.mcp.aws.athena import generate_athena_tools
+
+                    for t in generate_athena_tools(source):
+                        tool_registry.register(t)
+                elif kind == "aws-emr":
+                    from centrag.mcp.aws.emr import generate_emr_tools
+
+                    for t in generate_emr_tools(source):
+                        tool_registry.register(t)
+            else:
+                source_config = SQLSourceConfig(
+                    name=name,
+                    connection_string=source_def.get("connection_string", ""),
+                    kind=kind,
+                    schema=source_def.get("schema"),
+                    read_only=source_def.get("read_only", True),
+                )
+                source_registry.add(source_config)
+                # Auto-generate tools from schema reflection
+                tool_registry.generate_sql_tools(name)
+
             summary["sources"] += 1
 
     # 2. Parse Custom Tools (mirrors Toolbox ``case "tool":``)
@@ -175,9 +209,7 @@ def load_mcp_config(
                 logger.warning("invalid_toolset_format", name=name)
                 continue
 
-            tool_registry.register_toolset(
-                Toolset(name=name, tool_names=tools_list, description=desc)
-            )
+            tool_registry.register_toolset(Toolset(name=name, tool_names=tools_list, description=desc))
             summary["toolsets"] += 1
 
     logger.info(
@@ -193,7 +225,7 @@ def load_mcp_config(
 
 def _parse_custom_tool(
     name: str,
-    tool_def: Dict[str, Any],
+    tool_def: dict[str, Any],
     source_registry: SourceRegistry,
     tool_registry: ToolRegistry,
 ) -> None:
@@ -231,7 +263,7 @@ def _parse_custom_tool(
                     result = conn.execute(text(statement), kwargs)
                     if result.returns_rows:
                         columns = list(result.keys())
-                        rows = [dict(zip(columns, row)) for row in result.fetchmany(100)]
+                        rows = [dict(zip(columns, row, strict=False)) for row in result.fetchmany(100)]
                         return __import__("json").dumps(
                             {"columns": columns, "rows": rows, "count": len(rows)},
                             default=str,
@@ -240,16 +272,18 @@ def _parse_custom_tool(
             except Exception as e:
                 return f"Database Error: {e}"
 
-        tool_registry.register(MCPTool(
-            manifest=ToolManifest(
-                name=name,
-                description=description,
-                source_name=source_name,
-                annotations=annotations,
-                parameters=param_defs,
-            ),
-            handler=handler,
-        ))
+        tool_registry.register(
+            MCPTool(
+                manifest=ToolManifest(
+                    name=name,
+                    description=description,
+                    source_name=source_name,
+                    annotations=annotations,
+                    parameters=param_defs,
+                ),
+                handler=handler,
+            )
+        )
     else:
         logger.warning("unsupported_tool_kind", tool=name, kind=kind)
 
@@ -260,7 +294,7 @@ def _parse_custom_tool(
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
-def list_prebuilt_configs() -> List[str]:
+def list_prebuilt_configs() -> list[str]:
     """List available prebuilt config templates.
 
     Mirrors Toolbox ``prebuiltconfigs.GetPrebuiltSources()`` which
@@ -268,13 +302,10 @@ def list_prebuilt_configs() -> List[str]:
     """
     if not _TEMPLATES_DIR.exists():
         return []
-    return [
-        f.stem
-        for f in _TEMPLATES_DIR.glob("*.yaml")
-    ]
+    return [f.stem for f in _TEMPLATES_DIR.glob("*.yaml")]
 
 
-def get_prebuilt_config(name: str) -> Optional[str]:
+def get_prebuilt_config(name: str) -> str | None:
     """Get the raw YAML content of a prebuilt config template.
 
     Mirrors Toolbox ``prebuiltconfigs.Get()`` which looks up

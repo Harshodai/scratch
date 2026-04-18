@@ -1,16 +1,15 @@
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from centrag.config import get_settings
-from centrag.wiring import build_ingestion_service, build_retrieval_engine
 from centrag.abstractions.retrieval import RetrievalRequest
+from centrag.config import get_settings
 from centrag.middleware import RequestContext
-from centrag.abstractions.extractor import ContentType
+from centrag.wiring import build_ingestion_service, build_retrieval_engine
+
 
 async def verify_phase3():
     print("STARTING: Phase 3 Verification...")
@@ -38,7 +37,6 @@ async def verify_phase3():
     engine = build_retrieval_engine(settings)
 
     team_id = "verify-team"
-    doc_id = "phase3-test-doc"
     
     # 3. Create a hierarchical document
     content = """# Section 1: Overview

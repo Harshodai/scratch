@@ -22,7 +22,7 @@ logger = get_logger("extraction.multivector")
 class MultivectorEnricher:
     """
     LLM-powered enrichment for Multivector retrieval.
-    
+
     The WHY:
         Standard embeddings match based on semantic similarity of the full text.
         However, users often search for technical names (keywords) or high-level
@@ -38,7 +38,7 @@ class MultivectorEnricher:
         Processes a list of chunks and adds 'summary' and 'keywords' to their metadata.
         """
         enriched_chunks = []
-        
+
         for chunk in chunks:
             try:
                 # We do a single LLM call to get both for token efficiency
@@ -48,15 +48,13 @@ class MultivectorEnricher:
                     "2. A comma-separated list of the 5 most important technical keywords/entities.\n"
                     "Output ONLY a JSON object with keys 'summary' and 'keywords'."
                 )
-                
+
                 response = await self._llm.generate(
-                    prompt=f"Text: {chunk.content[:1000]}",
-                    context=[],
-                    system_prompt=system_prompt,
-                    temperature=0.0
+                    prompt=f"Text: {chunk.content[:1000]}", context=[], system_prompt=system_prompt, temperature=0.0
                 )
-                
+
                 import re
+
                 content = response.content.strip()
                 # Robust regex-based JSON extraction to handle LLM conversational slop
                 match = re.search(r"\{.*\}", content, re.DOTALL)
@@ -67,14 +65,14 @@ class MultivectorEnricher:
                 else:
                     clean_content = match.group(0)
                     metadata = json.loads(clean_content)
-                
+
                 # Update chunk metadata
                 chunk.metadata["facet_summary"] = metadata.get("summary", "")
                 chunk.metadata["facet_keywords"] = metadata.get("keywords", "")
-                
+
                 enriched_chunks.append(chunk)
             except Exception as e:
                 logger.warning("multivector_enrichment_failed", chunk_index=chunk.chunk_index, error=str(e))
                 enriched_chunks.append(chunk)
-                
+
         return enriched_chunks

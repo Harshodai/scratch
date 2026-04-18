@@ -16,6 +16,7 @@ Security: ROW-LEVEL SECURITY (RLS)
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -30,7 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING
+
 from centrag.utils.time import utcnow
 
 

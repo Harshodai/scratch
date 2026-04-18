@@ -28,9 +28,9 @@ class Relation:
 class GraphStoreProtocol(Protocol):
     """
     Protocol for knowledge graph storage.
-    
+
     The WHY:
-        Allows connecting disparate facts across documents that vector 
+        Allows connecting disparate facts across documents that vector
         similarity alone might miss. By abstracting the storage, we can
         start with a local SQLite implementation and scale to Neo4j/Memgraph
         without changing the extraction or retrieval logic.

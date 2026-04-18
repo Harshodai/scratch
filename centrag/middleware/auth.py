@@ -38,7 +38,7 @@ def verify_api_key(raw_key: str, stored_hash: str) -> bool:
         salt_hex, hash_hex = stored_hash.split(":", 1)
         salt = bytes.fromhex(salt_hex)
         expected_hash = bytes.fromhex(hash_hex)
-        
+
         # Use same parameters as creation (100k iterations, SHA256)
         actual_hash = hashlib.pbkdf2_hmac("sha256", raw_key.encode(), salt, 100_000)
         return secrets.compare_digest(actual_hash, expected_hash)

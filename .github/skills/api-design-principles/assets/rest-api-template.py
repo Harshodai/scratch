@@ -3,14 +3,15 @@ Production-ready REST API template using FastAPI.
 Includes pagination, filtering, error handling, and best practices.
 """
 
-from fastapi import FastAPI, HTTPException, Query, Path, Depends, status
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Path, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Optional, List, Any
-from datetime import datetime
-from enum import Enum
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 app = FastAPI(
     title="API Template",
@@ -35,7 +36,7 @@ app.add_middleware(
 )
 
 # Models
-class UserStatus(str, Enum):
+class UserStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     SUSPENDED = "suspended"
@@ -49,9 +50,9 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    status: Optional[UserStatus] = None
+    email: EmailStr | None = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    status: UserStatus | None = None
 
 class User(UserBase):
     id: str
@@ -66,7 +67,7 @@ class PaginationParams(BaseModel):
     page_size: int = Field(20, ge=1, le=100)
 
 class PaginatedResponse(BaseModel):
-    items: List[Any]
+    items: list[Any]
     total: int
     page: int
     page_size: int
@@ -74,14 +75,14 @@ class PaginatedResponse(BaseModel):
 
 # Error handling
 class ErrorDetail(BaseModel):
-    field: Optional[str] = None
+    field: str | None = None
     message: str
     code: str
 
 class ErrorResponse(BaseModel):
     error: str
     message: str
-    details: Optional[List[ErrorDetail]] = None
+    details: list[ErrorDetail] | None = None
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
@@ -99,8 +100,8 @@ async def http_exception_handler(request, exc):
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status: Optional[UserStatus] = Query(None),
-    search: Optional[str] = Query(None)
+    status: UserStatus | None = Query(None),
+    search: str | None = Query(None)
 ):
     """List users with pagination and filtering."""
     # Mock implementation

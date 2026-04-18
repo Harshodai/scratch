@@ -78,6 +78,7 @@ redis_client = redis.Redis(connection_pool=redis_pool)
 
 # --- Memory Cache for Hybrid Retrieval --- #
 from cachetools import LRUCache
+
 vector_cache = LRUCache(maxsize=100)
 
 # --- AWS Bedrock Clients --- #

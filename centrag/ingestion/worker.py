@@ -215,14 +215,12 @@ class IngestionWorker:
         )
 
         # Update document status to "pending"
-        try:
+        with contextlib.suppress(Exception):
             await self._store.update_meta(
                 team_id=team_id,
                 doc_id=job_id,
                 status="pending",
             )
-        except Exception:
-            pass  # Document may not exist yet; that's OK
 
         return job
 

@@ -1,8 +1,8 @@
 import asyncio
-import os
-from centrag.implementations.openai_llm import OpenAILLM
+
 from centrag.implementations.bedrock_llm import BedrockLLM
-from centrag.abstractions.llm import QueryComplexity
+from centrag.implementations.openai_llm import OpenAILLM
+
 
 async def smoke_test_openai():
     print("\n[SMOKE TEST] OpenAI LLM")

@@ -17,10 +17,11 @@ import threading
 import time
 
 import boto3
-import structlog
 from botocore.config import Config as BotoConfig
 
-logger = structlog.get_logger("aws_credentials")
+from centrag.utils.logger import get_logger
+
+logger = get_logger("mcp.aws_credentials")
 
 
 class AWSCredentialManager:

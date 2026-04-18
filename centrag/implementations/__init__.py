@@ -29,8 +29,8 @@ Available implementations:
 
 from centrag.implementations.bedrock_embedder import BedrockEmbedder
 from centrag.implementations.bedrock_llm import BedrockLLM
-from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
 from centrag.implementations.cohere_reranker import CohereReranker
+from centrag.implementations.llama_parse_extractor import LlamaParseExtractor
 from centrag.implementations.noop_embedder import NoOpEmbedder
 from centrag.implementations.noop_llm import NoOpLLM
 from centrag.implementations.noop_reranker import NoOpReranker
@@ -62,4 +62,3 @@ __all__ = [
     # Production Extractors
     "LlamaParseExtractor",
 ]
-

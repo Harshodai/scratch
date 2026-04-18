@@ -11,10 +11,10 @@ def get_processors():
     """Configures the structlog processing pipeline.
 
     The WHY:
-        Dynamic renderer selection is required to provide machine-readable JSON logs for production aggregators 
+        Dynamic renderer selection is required to provide machine-readable JSON logs for production aggregators
         (like ELK/Datadog) while maintaining a human-friendly console output for local development.
-        
-        A safe default (console) is chosen to ensure that if environment variables are missing, 
+
+        A safe default (console) is chosen to ensure that if environment variables are missing,
         developers can still see readable logs immediately without additional configuration.
 
     Returns:
@@ -82,7 +82,7 @@ class CentragLogger:
 
     def bind(self, **kwargs: Any) -> CentragLogger:
         """Bind additional context to the logger.
-        
+
         Returns a new CentragLogger instance with the context applied.
         """
         return CentragLogger(self._logger.bind(**kwargs))

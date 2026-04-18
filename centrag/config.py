@@ -57,11 +57,17 @@ class Settings(BaseSettings):
     def auto_register_enterprise_mcp(self) -> Self:
         """If mcp_enterprise_server exists, register it as an external server."""
         import os
+
         enterprise_path = os.path.join(os.getcwd(), "mcp_enterprise_server")
-        if os.path.isdir(enterprise_path) and self.enable_mcp:
-            if "enterprise" not in self.mcp_external_servers:
-                # We use 'py' to ensure we use the same environment's launcher
-                self.mcp_external_servers["enterprise"] = ["py", "-m", "mcp_enterprise_server.server", "--transport", "stdio"]
+        if os.path.isdir(enterprise_path) and self.enable_mcp and "enterprise" not in self.mcp_external_servers:
+            # We use 'py' to ensure we use the same environment's launcher
+            self.mcp_external_servers["enterprise"] = [
+                "py",
+                "-m",
+                "mcp_enterprise_server.server",
+                "--transport",
+                "stdio",
+            ]
         return self
 
     # --- Application ---

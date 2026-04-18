@@ -268,15 +268,15 @@ class DocumentCleaner:
                 continue
 
             # Skip very short lines that look like headers/footers
-            if len(stripped) < self._config.min_line_length_for_content and stripped and stripped[-1] not in ".!?:;,":
-                # Only skip if it looks like a page artifact, not content
-                if stripped.isdigit() or stripped.lower() in (
-                    "confidential",
-                    "draft",
-                    "internal",
-                ):
-                    stripped_count += 1
-                    continue
+            _is_short = len(stripped) < self._config.min_line_length_for_content
+            _looks_like_content = stripped and stripped[-1] not in ".!?:;,"
+            _is_page_artifact = stripped.isdigit() or stripped.lower() in (
+                "confidential", "draft", "internal"
+            )
+            
+            if _is_short and _looks_like_content and _is_page_artifact:
+                stripped_count += 1
+                continue
 
             result_lines.append(line)
 

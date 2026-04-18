@@ -14,10 +14,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from centrag.middleware.auth import resolve_api_key
 from centrag.utils.logger import get_logger
 
 logger = get_logger("routes.evaluate")

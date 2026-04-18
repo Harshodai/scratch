@@ -33,7 +33,7 @@ DEFAULT_MAX_LIMIT_BYTES = 25 * 1024 * 1024  # 25 MB max memory heap for RAG cach
 
 
 @dataclass
-class SWR_CacheEntry:
+class SWR_CacheEntry:  # noqa: N801
     """Wrapper for items stored in the internal LRU to track staleness."""
 
     value: Any

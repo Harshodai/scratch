@@ -13,7 +13,7 @@ The WHY:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from centrag.abstractions.embedder import EmbedderProtocol
@@ -40,7 +40,7 @@ class LateChunkingSimulator:
         full_text: str,
         chunk_boundaries: list[tuple[int, int]],
     ) -> list[list[float]]:
-        """ approximates late chunking using windowed embeddings.
+        """approximates late chunking using windowed embeddings.
 
         Implementation:
             For each chunk [start, end], we embed self[start-W : end+W].
@@ -52,7 +52,7 @@ class LateChunkingSimulator:
             # Expand window for context handle
             win_start = max(0, start - self._context_window)
             win_end = min(len(full_text), end + self._context_window)
-            
+
             windowed_text = full_text[win_start:win_end]
             tasks.append(self._embedder.embed_query(windowed_text))
 

@@ -24,12 +24,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Dict, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from sqlalchemy import create_engine, inspect
-from sqlalchemy.engine import Engine
 
+from centrag.mcp.aws_credentials import AWSCredentialManager
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
 
 logger = get_logger("mcp.source_registry")
 
@@ -46,10 +49,7 @@ def _validate_name(name: str) -> None:
     names must be 1-128 chars, alphanumeric + underscore/hyphen/dot only.
     """
     if not _VALID_NAME.match(name):
-        raise ValueError(
-            f"Invalid MCP resource name '{name}'. "
-            "Must be 1-128 chars: [a-zA-Z0-9_.-]"
-        )
+        raise ValueError(f"Invalid MCP resource name '{name}'. Must be 1-128 chars: [a-zA-Z0-9_.-]")
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ class SQLSourceConfig:
     name: str
     connection_string: str
     kind: str = "postgres"  # postgres | mysql | sqlite | oracle | mssql
-    schema: Optional[str] = None
+    schema: str | None = None
     read_only: bool = True
 
     @property
@@ -174,15 +174,94 @@ class SQLSource:
         """Verify the connection is alive."""
         try:
             with self.engine.connect() as conn:
-                conn.execute(
-                    __import__("sqlalchemy").text("SELECT 1")
-                )
+                conn.execute(__import__("sqlalchemy").text("SELECT 1"))
             return True
         except Exception:
             return False
 
     def to_config(self) -> SQLSourceConfig:
         """Round-trip back to config (mirrors Toolbox ``ToConfig()``)."""
+        return self._config
+
+
+# ---------------------------------------------------------------------------
+# Concrete: AWS Source (using AWSCredentialManager)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class AWSSourceConfig:
+    """Declarative config for an AWS source.
+
+    Supports connecting to AWS using the AWSCredentialManager, handling
+    PCL login and IAM Assumed Roles implicitly via local Boto3 chain.
+    """
+
+    name: str
+    region: str = "us-east-1"
+    role_arn: str | None = None
+    session_duration: int = 3600
+    endpoint_url: str | None = None
+    kind: str = "aws"
+    options: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def source_config_type(self) -> str:
+        return self.kind
+
+    def initialize(self) -> AWSSource:
+        _validate_name(self.name)
+
+        cred_manager = AWSCredentialManager(
+            region=self.region,
+            role_arn=self.role_arn,
+            session_name=f"MCP_{self.name}_Session",
+            session_duration=self.session_duration,
+            endpoint_url=self.endpoint_url,
+        )
+
+        logger.info(
+            "aws_source_initialized",
+            name=self.name,
+            kind=self.kind,
+            region=self.region,
+            role_arn=self.role_arn,
+        )
+
+        return AWSSource(
+            _name=self.name,
+            _kind=self.kind,
+            cred_manager=cred_manager,
+            _config=self,
+        )
+
+
+@dataclass
+class AWSSource:
+    """A live, initialized AWS data source."""
+
+    _name: str
+    _kind: str
+    cred_manager: AWSCredentialManager
+    _config: AWSSourceConfig
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def source_type(self) -> str:
+        return self._kind
+
+    def health_check(self) -> bool:
+        """Verify the credential chain is alive."""
+        try:
+            # We can use sts get-caller-identity to assert validity
+            sts = self.cred_manager.get_client("sts")
+            sts.get_caller_identity()
+            return True
+        except Exception:
+            return False
+
+    def to_config(self) -> AWSSourceConfig:
         return self._config
 
 
@@ -205,16 +284,20 @@ class SourceRegistry:
     """
 
     # Type → Config factory (mirrors Toolbox's ``sourceRegistry``)
-    _type_factories: ClassVar[Dict[str, type]] = {
+    _type_factories: ClassVar[dict[str, type]] = {
         "postgres": SQLSourceConfig,
         "mysql": SQLSourceConfig,
         "sqlite": SQLSourceConfig,
         "oracle": SQLSourceConfig,
         "mssql": SQLSourceConfig,
+        "aws-dynamodb": AWSSourceConfig,
+        "aws-s3": AWSSourceConfig,
+        "aws-athena": AWSSourceConfig,
+        "aws-emr": AWSSourceConfig,
     }
 
     def __init__(self) -> None:
-        self._sources: Dict[str, MCPSource] = {}
+        self._sources: dict[str, MCPSource] = {}
 
     def register_type(self, source_type: str, factory: type) -> bool:
         """Register a new source type factory.
@@ -234,14 +317,21 @@ class SourceRegistry:
         logger.info("source_registered", name=source.name, type=source.source_type)
         return source
 
-    def get(self, name: str) -> Optional[MCPSource]:
+    def get(self, name: str) -> MCPSource | None:
         """Look up a source by name (mirrors Toolbox ``SourceProvider.GetSource()``)."""
         return self._sources.get(name)
 
-    def get_sql(self, name: str) -> Optional[SQLSource]:
+    def get_sql(self, name: str) -> SQLSource | None:
         """Type-narrowed getter for SQL sources (mirrors Toolbox ``GetCompatibleSource[T]``)."""
         src = self._sources.get(name)
         if isinstance(src, SQLSource):
+            return src
+        return None
+
+    def get_aws(self, name: str) -> AWSSource | None:
+        """Type-narrowed getter for AWS sources."""
+        src = self._sources.get(name)
+        if isinstance(src, AWSSource):
             return src
         return None
 
@@ -252,7 +342,7 @@ class SourceRegistry:
             return True
         return False
 
-    def list_sources(self) -> Dict[str, str]:
+    def list_sources(self) -> dict[str, str]:
         """List all registered sources with their types."""
         return {name: src.source_type for name, src in self._sources.items()}
 

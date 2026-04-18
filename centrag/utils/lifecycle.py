@@ -9,15 +9,18 @@ Inspired by "Claude Code" resilience patterns:
 
 import asyncio
 import signal
-from typing import Any, Callable, Coroutine, List, Optional
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 from centrag.utils.logger import get_logger
 
 logger = get_logger("core.lifecycle")
 
+
 class GracefulShutdown:
     """
     Registry for async cleanup tasks that must run before process exit.
-    
+
     Usage:
         shutdown = GracefulShutdown()
         shutdown.register(my_service.stop, priority=1)
@@ -25,14 +28,14 @@ class GracefulShutdown:
     """
 
     def __init__(self, timeout: float = 30.0) -> None:
-        self._tasks: List[tuple[int, Callable[[], Coroutine[Any, Any, None]]]] = []
+        self._tasks: list[tuple[int, Callable[[], Coroutine[Any, Any, None]]]] = []
         self._timeout = timeout
         self._triggered = False
 
     def register(self, task: Callable[[], Coroutine[Any, Any, None]], priority: int = 10) -> None:
         """
         Register a cleanup task.
-        
+
         Args:
             task: Async function to call.
             priority: Lower numbers run first (e.g., drain before close).
@@ -54,19 +57,20 @@ class GracefulShutdown:
         if self._triggered:
             return
         self._triggered = True
-        
+
         logger.info("graceful_shutdown_initiated", tasks_count=len(self._tasks))
-        
+
         for priority, task in self._tasks:
             logger.info("executing_cleanup_task", task=task.__name__, priority=priority)
             try:
                 await asyncio.wait_for(task(), timeout=self._timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error("cleanup_task_timeout", task=task.__name__)
             except Exception as e:
                 logger.error("cleanup_task_failed", task=task.__name__, error=str(e))
 
         logger.info("graceful_shutdown_completed")
+
 
 # Global singleton for easy wiring
 shutdown_registry = GracefulShutdown()

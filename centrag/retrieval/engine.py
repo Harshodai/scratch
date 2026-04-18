@@ -64,9 +64,9 @@ if TYPE_CHECKING:
     )
     from centrag.abstractions.embedder import SparseEmbedderProtocol
     from centrag.evaluation.failure_store import FailureStore
-    from centrag.evaluation.judges import JudgeProtocol
-    from centrag.middleware import RequestContext
+    from centrag.evaluation.judges import JudgeResult
     from centrag.mcp.bridge import MCPBridge
+    from centrag.middleware import RequestContext
     from centrag.retrieval.generator import TwoPassGenerator
 
 logger = get_logger()
@@ -275,7 +275,7 @@ class RetrievalEngine:
             )
 
             start_time = time.monotonic()
-        
+
         settings = get_settings()
         log = logger.bind(
             team_id=ctx.team_id,
@@ -325,10 +325,16 @@ class RetrievalEngine:
                 query_intent = await self._query_transformer.transform(sanitized_query, ctx.team_id)
                 sanitized_query = query_intent.optimized_query
                 query_filter = query_intent.extracted_filter
-                log.info("query_transformed", optimized_query=sanitized_query, has_filters=bool(query_filter), hops=query_intent.reasoning_hops)
+                log.info(
+                    "query_transformed",
+                    optimized_query=sanitized_query,
+                    has_filters=bool(query_filter),
+                    hops=query_intent.reasoning_hops,
+                )
 
             # Update request with intent for downstream sub-retrievers (Graph, Multivector)
             from dataclasses import replace
+
             request = replace(request, query=sanitized_query, query_intent=query_intent)
 
             # --- Step 3: Retrieval (DUAL-PATH) ---
@@ -381,7 +387,10 @@ class RetrievalEngine:
             if not sources:
                 # ── Step 3.1: RELATIONAL PATH — Graph RAG (Phase 4) ────────────────
                 if settings.enable_graph_retrieval and self._graph_retriever:
-                    log.info("triggering_graph_retrieval", hops=request.query_intent.reasoning_hops if request.query_intent else 1)
+                    log.info(
+                        "triggering_graph_retrieval",
+                        hops=request.query_intent.reasoning_hops if request.query_intent else 1,
+                    )
                     graph_resp = await self._graph_retriever.retrieve(request)
                     if graph_resp.results:
                         graph_sources = [
@@ -390,8 +399,9 @@ class RetrievalEngine:
                                 document_id=r.doc_id,
                                 chunk_index=0,
                                 relevance_score=r.score,
-                                metadata={**r.metadata, "source": "graph"}
-                            ) for r in graph_resp.results
+                                metadata={**r.metadata, "source": "graph"},
+                            )
+                            for r in graph_resp.results
                         ]
                         sources.extend(graph_sources)
                         log.info("graph_retrieval_hits", count=len(graph_sources))
@@ -404,7 +414,7 @@ class RetrievalEngine:
                             query=sanitized_query,
                             team_id=ctx.team_id,
                             namespace=request.namespace,
-                            limit=request.max_results
+                            limit=request.max_results,
                         )
                     )
                     if mv_resp.results:
@@ -414,8 +424,9 @@ class RetrievalEngine:
                                 document_id=r.doc_id,
                                 chunk_index=r.metadata.get("chunk_index", 0),
                                 relevance_score=r.score,
-                                metadata={**r.metadata, "source": "multivector"}
-                            ) for r in mv_resp.results
+                                metadata={**r.metadata, "source": "multivector"},
+                            )
+                            for r in mv_resp.results
                         ]
                         sources.extend(mv_sources)
                         log.info("multivector_retrieval_hits", count=len(mv_sources))
@@ -433,22 +444,22 @@ class RetrievalEngine:
                     embed_token_estimate = len(sanitized_query.split()) * 2
                     # Ensure team-isolation is ALWAYS the baseline filter before merging LLM extractions
                     search_filter = VectorFilter.for_team(ctx.team_id)
-                    
+
                     # 1. Merge LLM-extracted filters (Adaptive RAG)
                     if query_filter:
                         search_filter.must.extend(query_filter.must)
                         search_filter.must_not.extend(query_filter.must_not)
-                        
+
                     # 2. Merge explicit API-provided filters
                     if request.metadata_filter:
                         for k, v in request.metadata_filter.items():
                             search_filter = search_filter.with_condition(k, v)
-                            
+
                     # 3. Apply namespace scoping
                     search_filter = search_filter.with_condition("namespace", request.namespace)
-                    
+
                     raw_results = await self._vectorstore.search(
-                        collection=self._collection_name,
+                        collection=self._collection,
                         vector=query_embedding,
                         filter=search_filter,
                         limit=request.max_results * 3,
@@ -572,7 +583,7 @@ class RetrievalEngine:
             context_texts = [s.content for s in sources]
             if memory_context:
                 context_texts = memory_context + context_texts
-            
+
             if static_context:
                 # CAG context goes at the top as 'Base Knowledge'
                 context_texts = [f"### BASE KNOWLEDGE (CAG)\n{static_context}"] + context_texts
@@ -620,11 +631,7 @@ class RetrievalEngine:
             # --- Step 11: Self-Evaluation Audit Trail (Background) ---
             settings = get_settings()
             # Conditional Optimization: Skip evaluation for SIMPLE queries
-            should_eval = (
-                settings.enable_self_evaluation 
-                and self._self_eval_judges 
-                and complexity.value != "simple"
-            )
+            should_eval = settings.enable_self_evaluation and self._self_eval_judges and complexity.value != "simple"
 
             if should_eval:
                 log.info("self_evaluation_triggered", complexity=complexity.value)
@@ -668,7 +675,7 @@ class RetrievalEngine:
     ) -> list[SourceChunk]:
         """
         Recursive Shadow Retrieval: Expand leaf chunks to parents/sections.
-        
+
         The WHY:
             Retrieval needs small chunks (precision). LLMs need large chunks (context).
             If a leaf chunk was retrieved, we fetch its parent from the DocumentStore
@@ -693,12 +700,12 @@ class RetrievalEngine:
 
                 # Create a map for fast lookup
                 chunk_map = {c["chunk_id"]: c for c in doc_chunks if "chunk_id" in c}
-                
+
                 # Climb the tree (Limited to 2 levels for now to prevent bloating)
                 current_id = parent_id
                 depth = 0
                 final_content = chunk.content
-                
+
                 while current_id in chunk_map and depth < 2:
                     parent = chunk_map[current_id]
                     final_content = parent.get("content", final_content)
@@ -706,11 +713,14 @@ class RetrievalEngine:
                     depth += 1
 
                 from dataclasses import replace
-                expanded_chunks.append(replace(
-                    chunk, 
-                    content=f"[Context Expanded]\n{final_content}",
-                    metadata={**chunk.metadata, "expansion_depth": depth}
-                ))
+
+                expanded_chunks.append(
+                    replace(
+                        chunk,
+                        content=f"[Context Expanded]\n{final_content}",
+                        metadata={**chunk.metadata, "expansion_depth": depth},
+                    )
+                )
             except Exception as e:
                 logger.warning("hierarchical_expansion_failed", error=str(e), doc_id=chunk.document_id)
                 expanded_chunks.append(chunk)
@@ -792,6 +802,7 @@ class RetrievalEngine:
         except asyncio.CancelledError:
             logger.warning("stream_aborted_by_client", request_id=ctx.request_id)
             raise
+
     async def _run_self_evaluation(
         self,
         query: str,
@@ -809,9 +820,8 @@ class RetrievalEngine:
             return
 
         settings = get_settings()
-        from centrag.evaluation.judges import JudgeResult
-        from centrag.evaluation.metrics import CaseResult
         from centrag.evaluation.dataset import TestCase
+        from centrag.evaluation.metrics import CaseResult
 
         source_texts = [s.content for s in response.sources]
         judge_results: list[JudgeResult] = []
@@ -844,13 +854,13 @@ class RetrievalEngine:
                 expected_answer="N/A (Production)",
                 difficulty="production",
             )
-            
+
             case_result = CaseResult(
                 case=case,
                 judge_results=judge_results,
                 generated_answer=response.answer,
                 retrieval_path=response.metadata.get("retrieval_source", "unknown"),
-                latency_ms=0.0, # Not strictly tracked for self-eval here
+                latency_ms=0.0,  # Not strictly tracked for self-eval here
                 retrieved_doc_ids=[s.document_id for s in response.sources],
             )
 

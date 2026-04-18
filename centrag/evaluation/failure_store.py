@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -78,7 +78,7 @@ class FailureCase:
 
     def __post_init__(self) -> None:
         if not self.timestamp:
-            self.timestamp = datetime.now(timezone.utc).isoformat()
+            self.timestamp = datetime.now(UTC).isoformat()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -199,11 +199,7 @@ class FailureStore:
         for f in self._failures:
             by_category[f.category.value] = by_category.get(f.category.value, 0) + 1
 
-        avg_score = (
-            sum(f.composite_score for f in self._failures) / len(self._failures)
-            if self._failures
-            else 0.0
-        )
+        avg_score = sum(f.composite_score for f in self._failures) / len(self._failures) if self._failures else 0.0
 
         return {
             "total_failures": self.count,

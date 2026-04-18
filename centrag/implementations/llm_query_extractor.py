@@ -101,7 +101,7 @@ class LLMQueryExtractor(QueryTransformerProtocol):
                 optimized_query=parsed.get("optimized_query", raw_query),
                 expansions=parsed.get("expansions", []),
                 extracted_filter=v_filter,  # v_filter explicitly contains the team_id base requirement
-                reasoning_hops=parsed.get("reasoning_hops", 0)
+                reasoning_hops=parsed.get("reasoning_hops", 0),
             )
 
             logger.info("query_transformed", original=raw_query, optimized=intent.optimized_query, filters=filters_dict)

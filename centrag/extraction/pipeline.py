@@ -22,9 +22,9 @@ from typing import TYPE_CHECKING, Any
 
 from centrag.abstractions.chunker import ChunkingConfig, ChunkingStrategy, ChunkResult
 from centrag.extraction.chunkers.fixed import FixedChunker
+from centrag.extraction.chunkers.hierarchical import HierarchicalSplitter
 from centrag.extraction.chunkers.proposition import PropositionChunker
 from centrag.extraction.chunkers.recursive import RecursiveChunker
-from centrag.extraction.chunkers.hierarchical import HierarchicalSplitter
 from centrag.extraction.contextualizer import SituatedContextGenerator
 from centrag.utils.logger import get_logger
 
@@ -192,10 +192,12 @@ class ExtractionPipeline:
 
         # --- Phase 4 pattern: Multivector Enrichment ---
         from centrag.config import get_settings
+
         settings = get_settings()
-        
+
         if settings.enable_multivector_extraction and self._llm_factory:
             from centrag.extraction.multivector import MultivectorEnricher
+
             enricher = MultivectorEnricher(self._llm_factory())
             chunks = await enricher.enrich(chunks)
             logger.info("multivector_enrichment_completed", count=len(chunks))
@@ -204,6 +206,7 @@ class ExtractionPipeline:
         triplets = []
         if settings.enable_graph_extraction and self._llm_factory:
             from centrag.extraction.graph_extractor import GraphExtractor
+
             extractor = GraphExtractor(self._llm_factory())
             # For efficiency, we extract from the whole document text or a rolling window
             # Here we extract from the full text to capture global relations
@@ -214,10 +217,11 @@ class ExtractionPipeline:
         global_metadata = {}
         if self._llm_factory:
             from centrag.extraction.metadata_extractor import DocumentMetadataExtractor
+
             meta_extractor = DocumentMetadataExtractor(self._llm_factory())
             global_metadata = await meta_extractor.extract_metadata(document.text)
             logger.info("global_metadata_extracted", metadata=global_metadata)
-            
+
             # Propagate to all chunks for filtering
             for chunk in chunks:
                 chunk.metadata.update(global_metadata)
@@ -230,7 +234,9 @@ class ExtractionPipeline:
                 "content_type": content_type.value,
                 "chunking_strategy": config.strategy.value,
                 "chunk_size": config.chunk_size,
-                "graph_triplets": [t.__dict__ for t in triplets] if triplets else [], # Temporary storage for ingestion service
+                "graph_triplets": [t.__dict__ for t in triplets]
+                if triplets
+                else [],  # Temporary storage for ingestion service
                 **global_metadata,
             },
         )

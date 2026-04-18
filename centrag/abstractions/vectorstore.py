@@ -108,7 +108,7 @@ class VectorStoreProtocol(Protocol):
 
         Optimization:
             Reduces network overhead by grouping multiple vectors
-            into a single database call. Handles both single and 
+            into a single database call. Handles both single and
             named vectors for Multivector/Facet search.
         """
         ...

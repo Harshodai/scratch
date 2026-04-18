@@ -9,17 +9,19 @@ Goal: "Maximize semantic overlap between query and chunk."
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, List
+
 import asyncio
+from typing import TYPE_CHECKING
 
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from centrag.abstractions.llm import LLMProtocol
-    from centrag.abstractions.extractor import ExtractedDocument
     from centrag.abstractions.chunker import ChunkResult
+    from centrag.abstractions.extractor import ExtractedDocument
+    from centrag.abstractions.llm import LLMProtocol
 
 logger = get_logger("extraction.contextualizer")
+
 
 class SituatedContextGenerator:
     """
@@ -33,7 +35,7 @@ class SituatedContextGenerator:
         """Construct the prompt for the situational summary."""
         # Use first 8k chars for doc summary to stay within context limits
         doc_guide = document_text[:8000]
-        
+
         return f"""
         <document>
         {doc_guide}
@@ -51,24 +53,24 @@ class SituatedContextGenerator:
         Respond only with the one-sentence context summary.
         """
 
-    async def contextualize(self, document: ExtractedDocument, chunks: List[ChunkResult]) -> List[ChunkResult]:
+    async def contextualize(self, document: ExtractedDocument, chunks: list[ChunkResult]) -> list[ChunkResult]:
         """
         Enriches a list of chunks with situational context summaries.
         """
         logger.info("contextualizing_chunks_started", count=len(chunks))
-        
+
         from dataclasses import replace
-        
+
         # Batching/Concurrency control would be implemented here in production
         # For now, we process as independent tasks
         tasks = []
         for chunk in chunks:
             prompt = self._build_context_prompt(document.text, chunk.content)
             tasks.append(self._llm.generate(prompt))
-            
+
         try:
             responses = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             hardened_chunks = []
             for i, response in enumerate(responses):
                 chunk = chunks[i]
@@ -76,17 +78,17 @@ class SituatedContextGenerator:
                     logger.warning("chunk_contextualization_failed", chunk_index=i, error=str(response))
                     hardened_chunks.append(chunk)
                     continue
-                
+
                 context_summary = response.content.strip()
                 # Prepend the context to the content as per the Substack recommendation
                 enriched_content = f"[Context: {context_summary}]\n\n{chunk.content}"
-                
+
                 # Create a new ChunkResult instance with the enriched content
                 hardened_chunks.append(replace(chunk, content=enriched_content))
-                
+
             logger.info("contextualizing_chunks_completed", count=len(hardened_chunks))
             return hardened_chunks
-            
+
         except Exception as e:
             logger.error("contextualization_batch_failed", error=str(e))
             return chunks

@@ -7,9 +7,7 @@ Uses mocked RetrievalEngine to avoid real API calls.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
+from unittest.mock import AsyncMock
 
 from centrag.abstractions.cache import CacheTier
 from centrag.abstractions.llm import QueryComplexity

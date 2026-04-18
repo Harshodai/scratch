@@ -20,7 +20,7 @@ logger = get_logger("retrieval.cag")
 class CAGManager:
     """
     Manages 'Base Knowledge' injection for specific namespaces.
-    
+
     The WHY:
         Frequent retrieval of the same 'Core Policies' is inefficient.
         CAG pre-loads this knowledge into the system prompt for low-latency,
@@ -40,18 +40,18 @@ class CAGManager:
             # In a real system, we'd have a specific table or cache for this.
             # Using shadow retrieval logic for now.
             docs = await self._doc_store.list_documents(team_id, namespace)
-            
-            base_docs = [d for d in docs if d.metadata.get("is_base") == True]
+
+            base_docs = [d for d in docs if d.metadata.get("is_base")]
             if not base_docs:
                 return ""
-                
+
             combined_context = []
-            for b_doc in base_docs:
+            for _b_doc in base_docs:
                 # Fetch full text
                 # doc_data = await self._doc_store.get_document_text(team_id, b_doc.doc_id)
                 # combined_context.append(f"Source: {b_doc.filename}\n{doc_data}")
                 pass
-                
+
             return "\n---\n".join(combined_context)
         except Exception as e:
             logger.error("cag_fetch_failed", error=str(e))

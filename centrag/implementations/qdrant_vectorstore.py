@@ -92,20 +92,20 @@ class QdrantVectorStore:
                         "summary": VectorParams(size=self._dimension, distance=Distance.COSINE, on_disk=self._on_disk),
                         "keywords": VectorParams(size=self._dimension, distance=Distance.COSINE, on_disk=self._on_disk),
                     }
-                    
+
                     self._client.create_collection(
                         collection_name=self._collection,
                         vectors_config=vectors_config,
                         sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.NONE)},
                     )
-                    
+
                     # Create payload indices for fast filtering at scale
                     self._client.create_payload_index(self._collection, "team_id", field_schema="keyword")
                     self._client.create_payload_index(self._collection, "namespace", field_schema="keyword")
                     self._client.create_payload_index(self._collection, "post_year", field_schema="keyword")
                     self._client.create_payload_index(self._collection, "post_month", field_schema="keyword")
                     self._client.create_payload_index(self._collection, "post_title", field_schema="keyword")
-                    
+
                     logger.info("vector_collection_initialized", name=self._collection, dimension=self._dimension)
                     logger.info(
                         "qdrant_collection_created_with_multivector",
@@ -119,10 +119,10 @@ class QdrantVectorStore:
                     collection=self._collection,
                 )
 
-            except ImportError:
+            except ImportError as e:
                 raise ImportError(
                     "qdrant-client is required for QdrantVectorStore. Install with: pip install qdrant-client"
-                )
+                ) from e
 
         return self._client
 
@@ -178,8 +178,7 @@ class QdrantVectorStore:
 
         if sparse_vector:
             vector_data["sparse"] = SparseVector(
-                indices=list(sparse_vector.keys()), 
-                values=list(sparse_vector.values())
+                indices=list(sparse_vector.keys()), values=list(sparse_vector.values())
             )
 
         client = self._get_client()
@@ -213,7 +212,7 @@ class QdrantVectorStore:
                 sv = sparse_vectors[i]
                 assert sv is not None
                 v_data["sparse"] = SparseVector(indices=list(sv.keys()), values=list(sv.values()))
-            
+
             points.append(PointStruct(id=id_val, vector=v_data, payload=pay))
 
         # Qdrant batch size limit is ~100 points per request
@@ -260,7 +259,7 @@ class QdrantVectorStore:
         if sparse_vector:
             # Qdrant Hybrid Search (RRF Native) using Prefetch
             from qdrant_client.models import Fusion, FusionQuery
-            
+
             prefetch = [
                 Prefetch(
                     query=vector,

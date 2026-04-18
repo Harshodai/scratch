@@ -25,9 +25,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from centrag.utils.logger import get_logger
 
 logger = get_logger("mcp_bridge.rag_tools")
+
+class SearchSource(BaseModel):
+    content: str
+    document_id: str
+    chunk_index: int
+    relevance_score: float
+
+class KnowledgeBaseResponse(BaseModel):
+    answer: str
+    sources: list[SearchSource]
+    query_complexity: str
+    cache_tier: str
+
+class SearchDocumentsResponse(BaseModel):
+    results: list[dict[str, Any]]
+    total_found: int
 
 
 def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
@@ -62,7 +80,7 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
         namespace: str = "default",
         max_results: int = 5,
         team_id: str = "default",
-    ) -> dict[str, Any]:
+    ) -> KnowledgeBaseResponse:
         """
         Query the knowledge base with full RAG pipeline.
 
@@ -98,20 +116,25 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
 
         response = await rag_engine.retrieve(request, ctx)
 
-        return {
-            "answer": response.answer,
-            "sources": [
-                {
-                    "content": s.content[:500],  # Cap content length
-                    "document_id": s.document_id,
-                    "chunk_index": s.chunk_index,
-                    "relevance_score": round(s.relevance_score, 3),
-                }
-                for s in response.sources
-            ],
-            "query_complexity": response.query_complexity.value,
-            "cache_tier": response.cache_tier.value,
-        }
+        sources = [
+            SearchSource(
+                content=s.content[:500],
+                document_id=s.document_id,
+                chunk_index=s.chunk_index,
+                relevance_score=round(s.relevance_score, 3),
+            )
+            for s in response.sources
+        ]
+
+        # Use model_dump to return standard serializable dict
+        # but ensure schema compliance upstream
+        model_out = KnowledgeBaseResponse(
+            answer=response.answer,
+            sources=sources,
+            query_complexity=response.query_complexity.value,
+            cache_tier=response.cache_tier.value,
+        )
+        return model_out
 
     @mcp_server.tool(
         name="search_documents",
@@ -126,7 +149,7 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
         namespace: str = "default",
         max_results: int = 10,
         team_id: str = "default",
-    ) -> dict[str, Any]:
+    ) -> SearchDocumentsResponse:
         """
         Raw document search — returns chunks without LLM synthesis.
 
@@ -159,8 +182,8 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
             limit=max_results,
         )
 
-        return {
-            "results": [
+        model_out = SearchDocumentsResponse(
+            results=[
                 {
                     "content": r.payload.get("content", ""),
                     "document_id": r.payload.get("document_id", r.id),
@@ -174,8 +197,9 @@ def register_rag_tools(mcp_server: Any, rag_engine: Any) -> None:
                 }
                 for r in raw_results
             ],
-            "total_found": len(raw_results),
-        }
+            total_found=len(raw_results),
+        )
+        return model_out
 
     @mcp_server.resource(
         uri="centrag://namespaces",

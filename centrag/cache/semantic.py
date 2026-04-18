@@ -11,13 +11,16 @@ Design Pattern: STRATEGY PATTERN (implements CacheProtocol).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 
 from centrag.abstractions.cache import CacheProtocol, CacheResult, CacheTier
-from centrag.abstractions.vectorstore import VectorStoreProtocol, VectorFilter
-from centrag.abstractions.embedder import EmbedderProtocol
+from centrag.abstractions.vectorstore import VectorFilter, VectorStoreProtocol
 from centrag.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from centrag.abstractions.embedder import EmbedderProtocol
 
 logger = get_logger("cache.semantic")
 
@@ -29,7 +32,7 @@ class SemanticCache:
     The WHY:
         Exact-match caches (L2 Redis) fail when queries are slightly rephrased.
         Semantic caching converts queries into vectors and uses a Vector DB
-        to find "conceptually identical" queries, significantly increasing 
+        to find "conceptually identical" queries, significantly increasing
         hit rates for common enterprise assistant topics.
 
     Architecture (SSDataManager):
@@ -48,10 +51,7 @@ class SemanticCache:
     ) -> None:
         # GPTCache pattern: validate threshold range (see gptcache/config.py line 51)
         if not 0.0 <= similarity_threshold <= 1.0:
-            raise ValueError(
-                f"Invalid similarity_threshold {similarity_threshold}, "
-                "reasonable range: 0.0-1.0"
-            )
+            raise ValueError(f"Invalid similarity_threshold {similarity_threshold}, reasonable range: 0.0-1.0")
         self._vector_store = vector_store
         self._scalar_store = scalar_store
         self._embedder = embedder
@@ -97,15 +97,12 @@ class SemanticCache:
                 return CacheResult(hit=False, tier=CacheTier.MISS)
 
             match = results[0]
-            
+
             # 3. Similarity Threshold Check (Distance-based for Qdrant Cosine)
             # Qdrant score is 0..1 for Cosine (Higher is better)
             if match.score < self._threshold:
                 logger.debug(
-                    "semantic_cache_miss_low_score",
-                    score=match.score,
-                    threshold=self._threshold,
-                    team_id=team_id
+                    "semantic_cache_miss_low_score", score=match.score, threshold=self._threshold, team_id=team_id
                 )
                 return CacheResult(hit=False, tier=CacheTier.MISS)
 
@@ -114,24 +111,11 @@ class SemanticCache:
             if not scalar_key:
                 return CacheResult(hit=False, tier=CacheTier.MISS)
 
-            scalar_result = await self._scalar_store.get(
-                key=scalar_key, 
-                team_id=team_id, 
-                namespace=namespace
-            )
+            scalar_result = await self._scalar_store.get(key=scalar_key, team_id=team_id, namespace=namespace)
 
             if scalar_result.hit:
-                logger.info(
-                    "semantic_cache_hit",
-                    score=match.score,
-                    team_id=team_id,
-                    tier=CacheTier.L3_SEMANTIC.value
-                )
-                return CacheResult(
-                    hit=True,
-                    tier=CacheTier.L3_SEMANTIC,
-                    value=scalar_result.value
-                )
+                logger.info("semantic_cache_hit", score=match.score, team_id=team_id, tier=CacheTier.L3_SEMANTIC.value)
+                return CacheResult(hit=True, tier=CacheTier.L3_SEMANTIC, value=scalar_result.value)
 
         except Exception as e:
             logger.error("semantic_cache_get_error", error=str(e), team_id=team_id)
@@ -156,11 +140,7 @@ class SemanticCache:
             # 1. Store in Scalar (Redis)
             # Use the key as the anchor (cached responses are often large)
             await self._scalar_store.set(
-                key=key,
-                value=value,
-                team_id=team_id,
-                ttl_seconds=ttl_seconds,
-                namespace=namespace
+                key=key, value=value, team_id=team_id, ttl_seconds=ttl_seconds, namespace=namespace
             )
 
             # 2. Embed query
@@ -170,6 +150,7 @@ class SemanticCache:
             # 3. Store in Vector DB
             # Note: Qdrant ID must be UUID-like or int. We use the SHA256 of the prompt.
             import hashlib
+
             id_str = f"{team_id}:{namespace or ''}:{key}"
             point_id = hashlib.sha256(id_str.encode()).hexdigest()
 
@@ -177,16 +158,13 @@ class SemanticCache:
                 "team_id": team_id,
                 "namespace": namespace,
                 "scalar_key": key,  # We use the raw prompt as the scalar key for Redis
-                "original_text": key[:100]  # For debugging/dashboards
+                "original_text": key[:100],  # For debugging/dashboards
             }
 
             await self._vector_store.upsert(
-                collection=self._collection,
-                id=point_id,
-                vector=query_vector,
-                payload=payload
+                collection=self._collection, id=point_id, vector=query_vector, payload=payload
             )
-            
+
             logger.debug("semantic_cache_set_complete", team_id=team_id)
 
         except Exception as e:

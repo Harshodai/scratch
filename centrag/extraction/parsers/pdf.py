@@ -178,10 +178,7 @@ class PDFParser(ExtractorProtocol):
 
         # Repetition check for top/bottom area
         is_at_extremity = y_pos < page_height * 0.08 or y_pos > page_height * 0.92
-        if is_at_extremity and counts.get(text, 0) > 1:
-            return True
-
-        return False
+        return bool(is_at_extremity and counts.get(text, 0) > 1)
 
     def _classify_element(self, text: str, block: tuple) -> str:
         """Heuristic classification of document elements."""

@@ -2,8 +2,8 @@
 MCP Process Manager — Handles lifecycle of external MCP servers as local subprocesses.
 
 The WHY:
-    Servers like AWS, Jira, and Confluence typically run as standalone processes 
-    (stdio or SSE). CentRAG needs a way to launch these "on-demand" and 
+    Servers like AWS, Jira, and Confluence typically run as standalone processes
+    (stdio or SSE). CentRAG needs a way to launch these "on-demand" and
     communicate with them via the Model Context Protocol.
 
 Pattern: ADAPTER / PROCESS MANAGER
@@ -12,37 +12,32 @@ Pattern: ADAPTER / PROCESS MANAGER
 from __future__ import annotations
 
 import atexit
-import asyncio
 import os
-import signal
 import subprocess
-from typing import Dict, List, Optional
+
 from centrag.utils.logger import get_logger
 
 logger = get_logger("mcp.process_manager")
 
+
 class MCPProcessManager:
     """
     Manages external MCP server processes.
-    
+
     Provides 'launch-and-forget' with automatic cleanup.
     """
 
     def __init__(self):
-        self._processes: Dict[str, subprocess.Popen] = {}
+        self._processes: dict[str, subprocess.Popen] = {}
         # Register cleanup for when the main CentRAG process exits
         atexit.register(self.shutdown_all)
 
     def launch_server(
-        self, 
-        name: str, 
-        command: List[str], 
-        env: Optional[Dict[str, str]] = None,
-        cwd: Optional[str] = None
+        self, name: str, command: list[str], env: dict[str, str] | None = None, cwd: str | None = None
     ) -> bool:
         """
         Launch an MCP server process.
-        
+
         Example:
             manager.launch_server("aws", ["npx", "-y", "@modelcontextprotocol/server-aws"])
         """
@@ -57,11 +52,11 @@ class MCPProcessManager:
 
         try:
             logger.info("mcp_server_launching", name=name, cmd=" ".join(command))
-            
+
             # Merit: Use a new process group to avoid signal propagation issues
             # Only on non-windows. On Windows use specific flags if needed.
             creation_flags = 0
-            if os.name == 'nt':
+            if os.name == "nt":
                 creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
 
             proc = subprocess.Popen(
@@ -71,9 +66,9 @@ class MCPProcessManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                creationflags=creation_flags
+                creationflags=creation_flags,
             )
-            
+
             self._processes[name] = proc
             return True
         except Exception as e:
@@ -103,11 +98,11 @@ class MCPProcessManager:
             return False
         return self._processes[name].poll() is None
 
-    async def get_server_output(self, name: str, lines: int = 10) -> List[str]:
+    async def get_server_output(self, name: str, lines: int = 10) -> list[str]:
         """Debug helper to read recent logs from a server's stderr/stdout."""
         if name not in self._processes:
             return []
-        
+
         proc = self._processes[name]
         # This is blocking, in a production system we'd use async streams
         # but for sub-process management this is a start.
@@ -117,7 +112,8 @@ class MCPProcessManager:
             if proc.stderr:
                 for _ in range(lines):
                     line = proc.stderr.readline()
-                    if not line: break
+                    if not line:
+                        break
                     output.append(line.strip())
         except Exception:
             pass

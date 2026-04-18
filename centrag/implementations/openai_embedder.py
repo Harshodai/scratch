@@ -20,8 +20,8 @@ Required: pip install openai
 from __future__ import annotations
 
 from typing import Any
-from centrag.extraction.embedder_utils import LateChunkingSimulator
 
+from centrag.extraction.embedder_utils import LateChunkingSimulator
 from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.embedder.openai")

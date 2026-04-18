@@ -143,7 +143,7 @@ class LateChunker:
         chunk_results: list[ChunkResult] = []
         current_pos = 0
 
-        for idx, span_sentences in enumerate(spans):
+        for _idx, span_sentences in enumerate(spans):
             raw_text = " ".join(span_sentences)
 
             # Skip tiny chunks
@@ -214,9 +214,7 @@ class LateChunker:
         Use chunk_with_embeddings() to get both chunks AND embeddings
         in a single pass (skipping the separate embedding step).
         """
-        chunks, _ = await self.chunk_with_embeddings(
-            text, config, document_title, section_headers
-        )
+        chunks, _ = await self.chunk_with_embeddings(text, config, document_title, section_headers)
         return chunks
 
     def _create_spans(self, sentences: list[str]) -> list[list[str]]:

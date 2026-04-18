@@ -22,9 +22,9 @@ Required IAM permission: bedrock:InvokeModel on the model ARN.
 from __future__ import annotations
 
 import json
-from typing import Any, Protocol
-from centrag.extraction.embedder_utils import LateChunkingSimulator
+from typing import Any
 
+from centrag.extraction.embedder_utils import LateChunkingSimulator
 from centrag.utils.logger import get_logger
 
 logger = get_logger("implementations.embedder.bedrock")
@@ -137,7 +137,7 @@ class BedrockEmbedder:
     ) -> list[list[float]]:
         """
         Late Chunking: embed chunks with full-document context.
-        
+
         Uses the LateChunkingSimulator to approximate contextual
         pooling for Titan models by using semantic sliding windows.
         """

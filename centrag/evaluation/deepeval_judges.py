@@ -23,8 +23,6 @@ SOLID: Open/Closed — new judge, existing evaluation harness unchanged.
 
 from __future__ import annotations
 
-from typing import Any
-
 from centrag.evaluation.judges import JudgeResult
 from centrag.utils.logger import get_logger
 

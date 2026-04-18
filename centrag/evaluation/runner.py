@@ -20,7 +20,6 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from centrag.evaluation.dataset import GoldenDataset, TestCase
 from centrag.evaluation.failure_store import FailureStore
 from centrag.evaluation.judges import (
     CoverageJudge,
@@ -32,6 +31,7 @@ from centrag.evaluation.metrics import CaseResult, EvaluationMetrics
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
+    from centrag.evaluation.dataset import GoldenDataset, TestCase
     from centrag.retrieval.engine import RetrievalEngine
 
 logger = get_logger("evaluation.runner")

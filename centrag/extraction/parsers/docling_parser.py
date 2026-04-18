@@ -11,13 +11,13 @@ Design Pattern: STRATEGY PATTERN
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
-from pathlib import Path
-import tempfile
-import os
 
-from centrag.extraction.parsers.base import BaseParser, ExtractionResult, ExtractedDocument
+import os
+import tempfile
+from typing import TYPE_CHECKING
+
 from centrag.abstractions.extractor import ContentType
+from centrag.extraction.parsers.base import BaseParser, ExtractedDocument, ExtractionResult
 from centrag.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -25,11 +25,12 @@ if TYPE_CHECKING:
 
 logger = get_logger("extraction.parsers.docling")
 
+
 class DoclingParser(BaseParser):
     """
     Advanced parser using Docling for structural extraction.
-    
-    Transforms PDFs, Docx, and images into high-fidelity Markdown 
+
+    Transforms PDFs, Docx, and images into high-fidelity Markdown
     with preserved tables and hierarchical headers.
     """
 
@@ -39,6 +40,7 @@ class DoclingParser(BaseParser):
         try:
             from docling.datamodel.base_models import InputFormat
             from docling.document_converter import DocumentConverter
+
             self._converter = DocumentConverter()
             self._InputFormat = InputFormat
             logger.info("docling_converter_initialized")
@@ -67,10 +69,10 @@ class DoclingParser(BaseParser):
         try:
             # 1. Convert to Docling internal format
             result = self._converter.convert(tmp_path)
-            
+
             # 2. Export to Markdown (best for LLM reasoning and chunking)
             markdown_content = result.document.export_to_markdown()
-            
+
             # 3. Extract structural metadata
             metadata = {
                 "docling_status": "success",

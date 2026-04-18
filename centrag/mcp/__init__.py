@@ -15,12 +15,12 @@ Architecture:
     intelligence with declarative configuration support.
 """
 
-from centrag.mcp.source_registry import SourceRegistry, SQLSource, SQLSourceConfig
-from centrag.mcp.tool_registry import ToolRegistry, MCPTool, Toolset, ToolAnnotations, ToolManifest
-from centrag.mcp.config_loader import load_mcp_config, list_prebuilt_configs, get_prebuilt_config
-from centrag.mcp.process_manager import MCPProcessManager
 from centrag.mcp.bridge import MCPBridge
+from centrag.mcp.config_loader import get_prebuilt_config, list_prebuilt_configs, load_mcp_config
 from centrag.mcp.dynamic_db_factory import DynamicSQLMCPFactory
+from centrag.mcp.process_manager import MCPProcessManager
+from centrag.mcp.source_registry import SourceRegistry, SQLSource, SQLSourceConfig
+from centrag.mcp.tool_registry import MCPTool, ToolAnnotations, ToolManifest, ToolRegistry, Toolset
 
 __all__ = [
     "SourceRegistry",
