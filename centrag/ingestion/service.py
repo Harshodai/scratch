@@ -308,68 +308,113 @@ class IngestionService:
                 chunks = extraction_result.chunks
                 chunk_count = len(chunks)
 
-                # Multivector / Multiple Embeddings indexing (Phase 4)
-                if settings.enable_multivector_extraction:
-                    logger.info("multivector_embedding_started", doc_id=doc_id, count=chunk_count)
-                    all_vectors = []
-                    for chunk in chunks:
-                        # Extract facets from metadata (added by Pipeline)
-                        summary = chunk.metadata.get("facet_summary", "")
-                        keywords = chunk.metadata.get("facet_keywords", "")
+                # --- INCREMENTAL INDEXING: Chunk Diffing ---
+                import hashlib
+                import uuid
 
-                        # Generate vectors for each facet
-                        vec_map = {
-                            "default": (await embedder.embed_documents([chunk.content]))[0],
-                            "summary": (await embedder.embed_documents([summary]))[0] if summary else None,
-                            "keywords": (await embedder.embed_documents([keywords]))[0] if keywords else None,
-                        }
-                        # Clean out None values
-                        all_vectors.append({k: v for k, v in vec_map.items() if v is not None})
-                    embeddings = all_vectors
-                else:
-                    # Standard Single-Vector Path
-                    if settings.enable_late_chunking and hasattr(embedder, "embed_with_late_chunking"):
-                        boundaries = [(c.metadata.get("start_idx", 0), c.metadata.get("end_idx", 0)) for c in chunks]
-                        embeddings = await embedder.embed_with_late_chunking(cleaned_text, boundaries)
+                def _hash_chunk(content: str) -> str:
+                    return hashlib.md5(content.encode("utf-8")).hexdigest()
+
+                old_chunks_data = await self._store.get_chunks(team_id, doc_id) or []
+                
+                # Ensure we handle both root properties and metadata safely
+                old_hash_to_id = {}
+                for c in old_chunks_data:
+                    c_id = c.get("chunk_id") or c.get("metadata", {}).get("chunk_id")
+                    c_hash = c.get("metadata", {}).get("hash") or _hash_chunk(c.get("content", ""))
+                    if c_id:
+                        old_hash_to_id[c_hash] = c_id
+
+                chunks_to_embed = []
+                ids = []
+                new_ids_to_embed = []
+                
+                for chunk in chunks:
+                    c_hash = _hash_chunk(chunk.content)
+                    chunk.metadata["hash"] = c_hash
+                    
+                    if c_hash in old_hash_to_id:
+                        # Re-use existing chunk
+                        chunk_id = old_hash_to_id[c_hash]
+                        chunk.metadata["chunk_id"] = chunk_id
+                        ids.append(chunk_id)
                     else:
-                        embeddings = await embedder.embed_documents([c.content for c in chunks])
+                        # New chunk to embed
+                        chunk_id = str(uuid.uuid4())
+                        chunk.metadata["chunk_id"] = chunk_id
+                        chunks_to_embed.append(chunk)
+                        new_ids_to_embed.append(chunk_id)
+                        ids.append(chunk_id)
 
-                # 2. Sparse Embed (Hybrid path)
-                sparse_vectors = None
-                if sparse_embedder:
-                    sparse_vectors = [await sparse_embedder.embed_sparse(c.content) for c in chunks]
+                if chunks_to_embed:
+                    # Multivector / Multiple Embeddings indexing (Phase 4)
+                    if settings.enable_multivector_extraction:
+                        logger.info("multivector_embedding_started", doc_id=doc_id, count=len(chunks_to_embed))
+                        all_vectors = []
+                        for chunk in chunks_to_embed:
+                            # Extract facets from metadata (added by Pipeline)
+                            summary = chunk.metadata.get("facet_summary", "")
+                            keywords = chunk.metadata.get("facet_keywords", "")
 
-                # 3. Payload preparation
-                ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
-                payloads = []
-                for _i, chunk in enumerate(chunks):
-                    # Combine chunk metadata with team/doc context
-                    payload = chunk.to_dict()
-                    payload.update(
-                        {
-                            "team_id": team_id,
-                            "document_id": doc_id,
-                            "doc_id": doc_id,  # redundancy for different retriever versions
-                            "namespace": namespace,
-                            "filename": filename,
-                        }
+                            # Generate vectors for each facet
+                            vec_map = {
+                                "default": (await embedder.embed_documents([chunk.content]))[0],
+                                "summary": (await embedder.embed_documents([summary]))[0] if summary else None,
+                                "keywords": (await embedder.embed_documents([keywords]))[0] if keywords else None,
+                            }
+                            # Clean out None values
+                            all_vectors.append({k: v for k, v in vec_map.items() if v is not None})
+                        embeddings = all_vectors
+                    else:
+                        # Standard Single-Vector Path
+                        if settings.enable_late_chunking and hasattr(embedder, "embed_with_late_chunking"):
+                            boundaries = [(c.metadata.get("start_idx", 0), c.metadata.get("end_idx", 0)) for c in chunks_to_embed]
+                            embeddings = await embedder.embed_with_late_chunking(cleaned_text, boundaries)
+                        else:
+                            embeddings = await embedder.embed_documents([c.content for c in chunks_to_embed])
+
+                    # 2. Sparse Embed (Hybrid path)
+                    sparse_vectors = None
+                    if sparse_embedder:
+                        sparse_vectors = [await sparse_embedder.embed_sparse(c.content) for c in chunks_to_embed]
+
+                    # 3. Payload preparation
+                    payloads = []
+                    for chunk, cid in zip(chunks_to_embed, new_ids_to_embed):
+                        payload = chunk.to_dict()
+                        payload.update(
+                            {
+                                "team_id": team_id,
+                                "document_id": doc_id,
+                                "doc_id": doc_id,  # redundancy for different retriever versions
+                                "namespace": namespace,
+                                "filename": filename,
+                                "chunk_id": cid,
+                            }
+                        )
+                        payloads.append(payload)
+
+                    # 5. Indexing (VectorStore for Search)
+                    await vectorstore.upsert_batch(
+                        collection=self._collection_name,
+                        ids=new_ids_to_embed,
+                        vectors=embeddings,
+                        payloads=payloads,
+                        sparse_vectors=sparse_vectors,
                     )
-                    payloads.append(payload)
 
                 # 4. Storage (DocumentStore for Shadow Retrieval)
+                # Store all chunks (both old and new) in the document layout
                 await self._store.store_chunks(team_id, doc_id, [c.to_dict() for c in chunks])
 
-                # 5. Indexing (VectorStore for Search)
-                await vectorstore.upsert_batch(
-                    collection=self._collection_name,
-                    ids=ids,
-                    vectors=embeddings,
-                    payloads=payloads,
-                    sparse_vectors=sparse_vectors,
-                )
+                # Incremental cleanup: Remove orphaned vectors from Qdrant
+                new_ids_set = set(ids)
+                orphans = [cid for cid in old_hash_to_id.values() if cid not in new_ids_set]
+                if orphans and hasattr(vectorstore, "delete_by_ids"):
+                    await vectorstore.delete_by_ids(self._collection_name, orphans)
 
                 vectors_available = True
-                logger.info("vector_indexing_complete", doc_id=doc_id, chunks=chunk_count)
+                logger.info("vector_indexing_complete", doc_id=doc_id, total_chunks=chunk_count, new_chunks=len(chunks_to_embed), deleted_orphans=len(orphans))
 
             except Exception as e:
                 logger.error("vector_indexing_failed", doc_id=doc_id, error=str(e))

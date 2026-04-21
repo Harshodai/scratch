@@ -328,6 +328,22 @@ class QdrantVectorStore:
         )
 
         return count_before
+    async def delete_by_ids(
+        self,
+        collection: str,
+        ids: list[str],
+    ) -> None:
+        """Atomic deletion of specific vectors by their unique IDs."""
+        from qdrant_client.models import PointIdsList
+
+        if not ids:
+            return
+
+        client = self._get_client()
+        client.delete(
+            collection_name=collection,
+            points_selector=PointIdsList(points=ids),
+        )
 
     async def set_payload(
         self,

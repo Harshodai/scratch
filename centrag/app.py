@@ -133,11 +133,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     # --- Start IngestionWorker (async background processor) ---
-    worker = IngestionWorker(
-        ingestion_service=app.state.ingestion_service,
-        document_store=document_store,
-        config=WorkerConfig(),
-    )
+    if settings.sqs_queue_url:
+        from centrag.ingestion.sqs_worker import AioSQSWorker
+
+        worker = AioSQSWorker(
+            sqs_queue_url=settings.sqs_queue_url,
+            ingestion_service=app.state.ingestion_service,
+            document_store=document_store,
+            config=WorkerConfig(),
+        )
+        logger.info("using_sqs_ingestion_worker", queue=settings.sqs_queue_url)
+    else:
+        worker = IngestionWorker(
+            ingestion_service=app.state.ingestion_service,
+            document_store=document_store,
+            config=WorkerConfig(),
+        )
+        logger.info("using_memory_ingestion_worker")
+
     await worker.start()
     shutdown_registry.register(worker.shutdown, priority=10)  # Drain worker first
     app.state.ingestion_worker = worker

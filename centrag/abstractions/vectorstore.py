@@ -153,6 +153,19 @@ class VectorStoreProtocol(Protocol):
         """
         ...
 
+    async def delete_by_ids(
+        self,
+        collection: str,
+        ids: list[str],
+    ) -> None:
+        """Atomic deletion of specific vectors by their unique IDs.
+        
+        The WHY:
+            Crucial for incremental indexing, allowing us to drop orphaned
+            chunks during a document update without clearing the entire document.
+        """
+        ...
+
     async def set_payload(
         self,
         collection: str,

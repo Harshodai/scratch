@@ -166,6 +166,20 @@ class NoOpVectorStore:
         logger.debug("noop_delete", collection=collection, count=len(to_delete))
         return len(to_delete)
 
+    async def delete_by_ids(
+        self,
+        collection: str,
+        ids: list[str],
+    ) -> None:
+        """Atomic deletion by unique IDs."""
+        deleted_count = 0
+        for vid in ids:
+            composite_key = f"{collection}:{vid}"
+            if composite_key in self._store:
+                del self._store[composite_key]
+                deleted_count += 1
+        logger.debug("noop_delete_by_ids", collection=collection, count=deleted_count)
+
     async def set_payload(
         self,
         collection: str,

@@ -491,6 +491,14 @@ def build_ingestion_service(
     # --- VECTOR path components ---
     embedder_factory, vectorstore_factory, emb_name, vs_name = _build_vector_components(settings)
 
+    try:
+        from centrag.extraction.chunkers.semantic import SemanticChunker
+        semantic_chunker = SemanticChunker(embed_fn=embedder_factory().embed_documents)
+        pipeline.register_chunker(ChunkingStrategy.SEMANTIC, semantic_chunker)
+        logger.info("semantic_chunker_wired")
+    except ImportError:
+        logger.warning("semantic_chunker_unavailable")
+
     service = IngestionService(
         extraction_pipeline=pipeline,
         tree_builder=tree_builder,
